@@ -2,8 +2,10 @@ import type { BuildItProject, Opening, WallId } from '../model/project'
 import type {
   AssemblyId,
   ConstructionMember,
+  FabricationSpec,
   GeneratedBuilding,
   MemberLayer,
+  ProfilePoint,
   SurfaceQuantity,
   Vector3Tuple,
 } from './construction'
@@ -37,7 +39,9 @@ interface AddMemberOptions {
   rotation?: Vector3Tuple
   cutLengthIn?: number
   idHint?: string
-  shape?: 'box' | 'gable'
+  shape?: 'box' | 'gable' | 'profile'
+  profile?: ProfilePoint[]
+  fabrication?: FabricationSpec
 }
 
 const SUBFLOOR_THICKNESS = 23 / 32
@@ -59,7 +63,39 @@ function addMember(context: GeneratorContext, options: AddMemberOptions): void {
     rotation: options.rotation,
     cutLengthIn: options.cutLengthIn,
     shape: options.shape,
+    profile: options.profile,
+    fabrication: options.fabrication,
   })
+}
+
+function signedArea(points: ProfilePoint[]): number {
+  return points.reduce((area, point, index) => {
+    const next = points[(index + 1) % points.length]
+    return area + point[0] * next[1] - next[0] * point[1]
+  }, 0)
+}
+
+function profileGeometry(
+  worldPoints: ProfilePoint[],
+  extrusionIn: number,
+  fixedIn: number,
+): Pick<AddMemberOptions, 'size' | 'position' | 'shape' | 'profile'> {
+  const points = signedArea(worldPoints) < 0 ? [...worldPoints].reverse() : worldPoints
+  const xs = points.map(([x]) => x)
+  const ys = points.map(([, y]) => y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const centerX = (minX + maxX) / 2
+  const centerY = (minY + maxY) / 2
+
+  return {
+    size: [maxX - minX, maxY - minY, extrusionIn],
+    position: [centerX, centerY, fixedIn],
+    shape: 'profile',
+    profile: points.map(([x, y]) => [x - centerX, y - centerY]),
+  }
 }
 
 function memberPositions(spanIn: number, spacingIn: number): number[] {
@@ -582,7 +618,14 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
   return netArea
 }
 
-function addGableEndFraming(context: GeneratorContext, wallBaseIn: number, riseIn: number): number {
+function addGableEndFraming(
+  context: GeneratorContext,
+  wallBaseIn: number,
+  riseIn: number,
+  roofBottomY: (horizontalRunIn: number) => number,
+  ridgeBottomY: number,
+  roofAngleDeg: number,
+): number {
   const { project } = context
   const { widthIn, lengthIn, wallHeightIn } = project.dimensions
   const studMaterial = project.walls.studSize as MaterialId
@@ -595,27 +638,48 @@ function addGableEndFraming(context: GeneratorContext, wallBaseIn: number, riseI
     { id: 'front' as const, fixedIn: framingPlane, outward: 1 as const },
     { id: 'back' as const, fixedIn: -framingPlane, outward: -1 as const },
   ]) {
-    const definition: WallDefinition = {
-      id: wall.id,
-      orientation: 'x',
-      spanIn: widthIn,
-      surfaceSpanIn: widthIn,
-      fixedIn: wall.fixedIn,
-      outward: wall.outward,
-    }
-    for (const x of centeredMemberPositions(widthIn, project.walls.spacingIn).slice(1, -1)) {
-      const height = riseIn * (1 - Math.abs(x) / (widthIn / 2))
-      addVerticalWallMember(
-        context,
-        definition,
-        studMaterial,
+    for (const x of centeredMemberPositions(widthIn - studDepth * 2, project.walls.spacingIn)) {
+      const left = x - PLATE_THICKNESS / 2
+      const right = x + PLATE_THICKNESS / 2
+      const centeredAtRidge = Math.abs(x) < 0.01
+      const topLeft = centeredAtRidge ? ridgeBottomY : roofBottomY(Math.abs(left))
+      const topRight = centeredAtRidge ? ridgeBottomY : roofBottomY(Math.abs(right))
+      const longPointLength = Math.max(topLeft, topRight) - baseY
+      if (longPointLength <= 0.5) continue
+      const geometry = profileGeometry(
+        [
+          [left, baseY],
+          [right, baseY],
+          [right, topRight],
+          [left, topLeft],
+        ],
         studDepth,
-        x,
-        baseY,
-        Math.max(0, height - 1.5),
-        `${wall.id} gable stud`,
-        'gable-stud',
+        wall.fixedIn,
       )
+      addMember(context, {
+        label: `${wall.id} gable stud`,
+        assembly: 'walls',
+        layer: 'framing',
+        materialId: studMaterial,
+        ...geometry,
+        cutLengthIn: longPointLength,
+        idHint: 'gable-stud',
+        fabrication: {
+          longPointLengthIn: longPointLength,
+          cuts: [
+            {
+              id: centeredAtRidge ? 'top-square' : 'top-slope',
+              label: centeredAtRidge ? 'Top square cut' : 'Top slope cut',
+              type: centeredAtRidge ? 'square' : 'slope',
+              angleDeg: centeredAtRidge ? undefined : roofAngleDeg,
+              note: centeredAtRidge
+                ? 'Cut square beneath the ridge board.'
+                : 'Long point follows the underside of the common rafter.',
+            },
+            { id: 'bottom-square', label: 'Bottom square cut', type: 'square' },
+          ],
+        },
+      })
     }
 
     addMember(context, {
@@ -696,18 +760,98 @@ function addRoof(
   const pitch = project.roof.pitchRise / 12
   const run = widthIn / 2
   const extendedRun = run + overhang
-  const rise = run * pitch
-  const extendedRise = extendedRun * pitch
-  const rafterLength = Math.hypot(extendedRun, extendedRise)
   const roofLength = lengthIn + overhang * 2
   const roofBase = wallBaseIn + wallHeightIn
-  const peakY = roofBase + rise
-  const eaveY = peakY - extendedRise
   const angle = Math.atan(pitch)
+  const angleDeg = (angle * 180) / Math.PI
+  const cosine = Math.cos(angle)
   const rafterMaterial = project.roof.rafterSize as MaterialId
   const [rafterThickness, rafterDepth] = lumberDimensions(rafterMaterial)
+  const [, studDepth] = lumberDimensions(project.walls.studSize as MaterialId)
+  const ridgeMaterial = (['2x4', '2x6', '2x8', '2x10', '2x12'] as const).find(
+    (materialId) => (getMaterial(materialId).actualDepthIn ?? 0) >= rafterDepth / cosine,
+  )
+  const ridgeBoardMaterial: MaterialId = ridgeMaterial ?? '2x12'
+  const [ridgeThickness, ridgeDepth] = lumberDimensions(ridgeBoardMaterial)
+  const ridgeFaceRun = ridgeThickness / 2
+  const maximumBirdsmouthDepth = rafterDepth / 3
+  const fullPlateNotchDepth = studDepth * pitch * cosine
+  const birdsmouthSeatLength =
+    fullPlateNotchDepth <= maximumBirdsmouthDepth
+      ? studDepth
+      : Math.max(PLATE_THICKNESS, maximumBirdsmouthDepth / (pitch * cosine))
+  const centerPeakY = roofBase + (run - birdsmouthSeatLength) * pitch + rafterDepth / (2 * cosine)
+  const centerTailY = centerPeakY - extendedRun * pitch
+  const topY = (horizontalRunIn: number) =>
+    centerPeakY - horizontalRunIn * pitch + rafterDepth / (2 * cosine)
+  const bottomY = (horizontalRunIn: number) =>
+    centerPeakY - horizontalRunIn * pitch - rafterDepth / (2 * cosine)
+  const ridgeTopY = topY(ridgeFaceRun)
+  const ridgeBottomY = ridgeTopY - ridgeDepth
+  const rafterLongPointLength = Math.hypot(
+    extendedRun - ridgeFaceRun,
+    topY(extendedRun) - topY(ridgeFaceRun),
+  )
+  const roofSlopeLength = Math.hypot(extendedRun, extendedRun * pitch)
+  const birdsmouthDepth = (roofBase - bottomY(run)) * cosine
+  const rise = run * pitch
 
-  const gableAreaSqIn = addGableEndFraming(context, wallBaseIn, rise)
+  const rafterGeometry = (side: -1 | 1, fixedIn: number) => {
+    const signed = (horizontalRunIn: number): number => side * horizontalRunIn
+    return profileGeometry(
+      [
+        [signed(ridgeFaceRun), bottomY(ridgeFaceRun)],
+        [signed(run - birdsmouthSeatLength), roofBase],
+        [signed(run), roofBase],
+        [signed(run), bottomY(run)],
+        [signed(extendedRun), bottomY(extendedRun)],
+        [signed(extendedRun), topY(extendedRun)],
+        [signed(ridgeFaceRun), topY(ridgeFaceRun)],
+      ],
+      rafterThickness,
+      fixedIn,
+    )
+  }
+
+  const rafterFabrication: FabricationSpec = {
+    longPointLengthIn: rafterLongPointLength,
+    cuts: [
+      {
+        id: 'ridge-plumb',
+        label: 'Ridge plumb cut',
+        type: 'plumb',
+        angleDeg,
+        note: 'Long point butts against the face of the ridge board.',
+      },
+      {
+        id: 'birdsmouth',
+        label: 'Birdsmouth seat',
+        type: 'birdsmouth',
+        depthIn: birdsmouthDepth,
+        seatLengthIn: birdsmouthSeatLength,
+        note:
+          birdsmouthSeatLength < studDepth
+            ? 'Seat is shortened to keep the notch within one-third of the rafter depth.'
+            : 'Horizontal seat bears across the wall top plate.',
+      },
+      {
+        id: 'tail-plumb',
+        label: 'Tail plumb cut',
+        type: 'plumb',
+        angleDeg,
+        note: 'Vertical tail cut establishes the fascia line.',
+      },
+    ],
+  }
+
+  const gableAreaSqIn = addGableEndFraming(
+    context,
+    wallBaseIn,
+    rise,
+    bottomY,
+    ridgeBottomY,
+    angleDeg,
+  )
   const structuralRafterPositions = memberCenterPositions(
     lengthIn,
     project.roof.spacingIn,
@@ -722,18 +866,37 @@ function addRoof(
         assembly: 'roof',
         layer: 'framing',
         materialId: rafterMaterial,
-        size: [rafterLength, rafterDepth, rafterThickness],
-        position: [(side * extendedRun) / 2, (eaveY + peakY) / 2, z],
-        rotation: [0, 0, side === -1 ? angle : -angle],
-        cutLengthIn: rafterLength,
+        ...rafterGeometry(side, z),
+        cutLengthIn: rafterLongPointLength,
         idHint: 'rafter',
+        fabrication: rafterFabrication,
       })
     }
+
+    const tieMaterial: MaterialId = '2x4'
+    const [, tieDepth] = lumberDimensions(tieMaterial)
+    addMember(context, {
+      label: 'Rafter tie',
+      assembly: 'roof',
+      layer: 'framing',
+      materialId: tieMaterial,
+      size: [widthIn, tieDepth, PLATE_THICKNESS],
+      position: [0, roofBase - tieDepth / 2, z + (z >= 0 ? -rafterThickness : rafterThickness)],
+      cutLengthIn: widthIn,
+      idHint: 'rafter-tie',
+      fabrication: {
+        longPointLengthIn: widthIn,
+        cuts: [
+          { id: 'left-square', label: 'Left square cut', type: 'square' },
+          { id: 'right-square', label: 'Right square cut', type: 'square' },
+        ],
+      },
+    })
   }
 
   if (overhang > 0) {
     const flyRafterOffset = roofLength / 2 - rafterThickness / 2
-    const lookoutLength = overhang + rafterThickness
+    const lookoutLength = Math.max(overhang - rafterThickness, 0)
     const lookoutNormalOffset = rafterDepth / 2 - PLATE_THICKNESS / 2
     const lookoutRuns = [extendedRun * 0.2, extendedRun * 0.52, extendedRun * 0.84]
 
@@ -745,16 +908,15 @@ function addRoof(
           assembly: 'roof',
           layer: 'framing',
           materialId: rafterMaterial,
-          size: [rafterLength, rafterDepth, rafterThickness],
-          position: [(side * extendedRun) / 2, (eaveY + peakY) / 2, end * flyRafterOffset],
-          rotation: [0, 0, rotationZ],
-          cutLengthIn: rafterLength,
+          ...rafterGeometry(side, end * flyRafterOffset),
+          cutLengthIn: rafterLongPointLength,
           idHint: 'fly-rafter',
+          fabrication: rafterFabrication,
         })
 
-        for (const lookoutRun of lookoutRuns) {
+        for (const lookoutRun of lookoutLength > 0 ? lookoutRuns : []) {
           const centerlineX = side * lookoutRun
-          const centerlineY = peakY - lookoutRun * pitch
+          const centerlineY = centerPeakY - lookoutRun * pitch
           addMember(context, {
             label: `${end === 1 ? 'Front' : 'Back'} rake lookout`,
             assembly: 'roof',
@@ -769,6 +931,13 @@ function addRoof(
             rotation: [0, 0, rotationZ],
             cutLengthIn: lookoutLength,
             idHint: 'rake-lookout',
+            fabrication: {
+              longPointLengthIn: lookoutLength,
+              cuts: [
+                { id: 'inner-square', label: 'Inner square cut', type: 'square' },
+                { id: 'outer-square', label: 'Outer square cut', type: 'square' },
+              ],
+            },
           })
         }
       }
@@ -779,9 +948,9 @@ function addRoof(
     label: 'Roof ridge board',
     assembly: 'roof',
     layer: 'framing',
-    materialId: '2x8',
-    size: [1.5, 7.25, roofLength],
-    position: [0, peakY - 2, 0],
+    materialId: ridgeBoardMaterial,
+    size: [ridgeThickness, ridgeDepth, roofLength],
+    position: [0, ridgeTopY - ridgeDepth / 2, 0],
     cutLengthIn: roofLength,
     idHint: 'ridge-board',
   })
@@ -795,10 +964,10 @@ function addRoof(
       assembly: 'roof',
       layer: 'sheathing',
       materialId: project.roof.sheathingMaterialId,
-      size: [rafterLength, WALL_SHEATHING_THICKNESS, roofLength],
+      size: [roofSlopeLength, WALL_SHEATHING_THICKNESS, roofLength],
       position: [
         (side * extendedRun) / 2 + side * Math.sin(angle) * sheathingOffset,
-        (eaveY + peakY) / 2 + Math.cos(angle) * sheathingOffset,
+        (centerTailY + centerPeakY) / 2 + Math.cos(angle) * sheathingOffset,
         0,
       ],
       rotation: [0, 0, rotationZ],
@@ -809,10 +978,10 @@ function addRoof(
       assembly: 'roof',
       layer: 'finish',
       materialId: project.roof.roofingMaterialId,
-      size: [rafterLength, ROOFING_THICKNESS, roofLength],
+      size: [roofSlopeLength, ROOFING_THICKNESS, roofLength],
       position: [
         (side * extendedRun) / 2 + side * Math.sin(angle) * roofingOffset,
-        (eaveY + peakY) / 2 + Math.cos(angle) * roofingOffset,
+        (centerTailY + centerPeakY) / 2 + Math.cos(angle) * roofingOffset,
         0,
       ],
       rotation: [0, 0, rotationZ],
@@ -820,7 +989,7 @@ function addRoof(
     })
   }
 
-  const roofAreaSqIn = 2 * rafterLength * roofLength
+  const roofAreaSqIn = 2 * roofSlopeLength * roofLength
   context.surfaces.push(
     {
       id: 'roof-sheathing-area',
@@ -838,7 +1007,8 @@ function addRoof(
     },
   )
 
-  return { roofAreaSqIn, peakHeightIn: peakY, gableAreaSqIn }
+  const peakHeightIn = topY(0) + Math.cos(angle) * (WALL_SHEATHING_THICKNESS + ROOFING_THICKNESS)
+  return { roofAreaSqIn, peakHeightIn, gableAreaSqIn }
 }
 
 export function generateBuilding(project: BuildItProject): GeneratedBuilding {

@@ -63,6 +63,8 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Include basic foundation, floor, wall, roof, sheathing, siding, and roofing assemblies.
 - Initially support 2×4 and 2×6 walls with 16-inch and 24-inch framing spacing.
 - Model single bottom plates, double top plates, corners, and framed openings.
+- Model the reference gable roof as paired profiled rafters, a ridge board, rafter ties, supported rake overhangs, and slope-cut gable framing.
+- Derive visible member profiles and semantic cut intent from the same construction dimensions.
 - Apply practical rules for dimensions, framing layout, and supported openings.
 - Flag obvious construction conflicts without claiming engineering approval.
 
@@ -100,6 +102,7 @@ Guidance has three levels:
 - Estimate primary lumber, panels, siding, roofing, insulation, and finish materials.
 - Recalculate quantities when the design changes.
 - Provide both a construction breakdown and a grouped purchase estimate.
+- Show conceptual per-member cut intent where it is needed to explain assembly fit.
 - Keep retailer pricing and advanced cut optimization outside the MVP.
 - Clearly label quantities as planning estimates that may require waste factors and field adjustment.
 

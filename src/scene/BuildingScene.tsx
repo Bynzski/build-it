@@ -36,6 +36,16 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
     shape.closePath()
     return shape
   }, [member.size])
+  const profileShape = useMemo(() => {
+    const points = member.profile ?? []
+    const shape = new THREE.Shape()
+    const first = points[0]
+    if (!first) return shape
+    shape.moveTo(first[0], first[1])
+    for (const point of points.slice(1)) shape.lineTo(point[0], point[1])
+    shape.closePath()
+    return shape
+  }, [member.profile])
 
   if (!assemblyVisible || !layerVisible) return null
 
@@ -64,6 +74,11 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
       {member.shape === 'gable' ? (
         <extrudeGeometry
           args={[gableShape, { depth: member.size[2], bevelEnabled: false }]}
+          onUpdate={(geometry) => geometry.center()}
+        />
+      ) : member.shape === 'profile' ? (
+        <extrudeGeometry
+          args={[profileShape, { depth: member.size[2], bevelEnabled: false }]}
           onUpdate={(geometry) => geometry.center()}
         />
       ) : (

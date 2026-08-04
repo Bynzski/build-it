@@ -106,4 +106,75 @@ describe('construction generator', () => {
       (roofSheathing?.size[2] ?? 0) / 2,
     )
   })
+
+  it('profiles common rafters with flush ridge, birdsmouth, and tail cuts', () => {
+    const building = generateBuilding(referenceDesign)
+    const rafters = building.members.filter(
+      (member) => member.id.startsWith('rafter-') && !member.id.startsWith('rafter-tie-'),
+    )
+    const rightRafter = rafters.find((member) => member.position[0] > 0)
+    const profileWorldX = rightRafter?.profile?.map(([x]) => x + rightRafter.position[0]) ?? []
+    const birdsmouth = rightRafter?.fabrication?.cuts.find((cut) => cut.type === 'birdsmouth')
+
+    expect(rightRafter?.shape).toBe('profile')
+    expect(Math.min(...profileWorldX)).toBeCloseTo(0.75)
+    expect(rightRafter?.rotation).toBeUndefined()
+    expect(rightRafter?.fabrication?.cuts.map((cut) => cut.type)).toEqual([
+      'plumb',
+      'birdsmouth',
+      'plumb',
+    ])
+    expect(rightRafter?.fabrication?.cuts[0].angleDeg).toBeCloseTo(26.565, 2)
+    expect(birdsmouth?.seatLengthIn).toBeCloseTo(3.5)
+    expect(birdsmouth?.depthIn).toBeCloseTo(1.565, 2)
+  })
+
+  it('adds tied rafter pairs and slope-cut gable studs', () => {
+    const building = generateBuilding(referenceDesign)
+    const rafters = building.members.filter(
+      (member) => member.id.startsWith('rafter-') && !member.id.startsWith('rafter-tie-'),
+    )
+    const ties = building.members.filter((member) => member.id.startsWith('rafter-tie-'))
+    const gableStuds = building.members.filter((member) => member.id.startsWith('gable-stud-'))
+
+    expect(ties).toHaveLength(rafters.length / 2)
+    expect(ties.every((member) => member.materialId === '2x4')).toBe(true)
+    expect(gableStuds.every((member) => member.shape === 'profile')).toBe(true)
+    expect(
+      gableStuds.some((member) => member.fabrication?.cuts.some((cut) => cut.type === 'slope')),
+    ).toBe(true)
+  })
+
+  it('selects a ridge board deep enough for steep rafter cut ends', () => {
+    const steep = cloneProject(referenceDesign)
+    steep.roof.pitchRise = 12
+    steep.roof.rafterSize = '2x8'
+    const building = generateBuilding(steep)
+    const ridge = building.members.find((member) => member.id.startsWith('ridge-board-'))
+    const rafter = building.members.find((member) => member.id.startsWith('rafter-'))
+    const birdsmouth = rafter?.fabrication?.cuts.find((cut) => cut.type === 'birdsmouth')
+
+    expect(ridge?.materialId).toBe('2x12')
+    expect(birdsmouth?.seatLengthIn).toBeGreaterThanOrEqual(1.5)
+    expect(birdsmouth?.seatLengthIn).toBeLessThan(3.5)
+    expect(birdsmouth?.depthIn).toBeLessThanOrEqual(7.25 / 3)
+  })
+
+  it('cuts rake lookouts to the clear distance between gable and fly rafters', () => {
+    const building = generateBuilding(referenceDesign)
+    const lookout = building.members.find(
+      (member) => member.id.startsWith('rake-lookout-') && member.position[2] > 0,
+    )
+    const flyRafter = building.members.find(
+      (member) => member.id.startsWith('fly-rafter-') && member.position[2] > 0,
+    )
+
+    expect(lookout?.cutLengthIn).toBeCloseTo(10.5)
+    expect(lookout?.size[2]).toBeCloseTo(10.5)
+    expect((lookout?.position[2] ?? 0) - (lookout?.size[2] ?? 0) / 2).toBeCloseTo(60)
+    expect((lookout?.position[2] ?? 0) + (lookout?.size[2] ?? 0) / 2).toBeCloseTo(
+      (flyRafter?.position[2] ?? 0) - (flyRafter?.size[2] ?? 0) / 2,
+    )
+    expect(lookout?.fabrication?.cuts.map((cut) => cut.type)).toEqual(['square', 'square'])
+  })
 })

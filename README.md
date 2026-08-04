@@ -9,9 +9,11 @@ BuildIt is a local-first, material-aware 3D designer for basic sheds, cabins, an
 - Interactive 3D framing and envelope views
 - Drag handles and exact width, length, and wall-height inputs
 - Skid foundation, platform floor, framed walls, gable roof, doors, and windows
+- Profiled rafters with ridge, birdsmouth, tail-cut, rafter-tie, and rake-support details
 - Configurable common framing sizes and 16/24-inch spacing
 - Optional insulation and interior finish quantities
 - Live construction breakdown and grouped purchase estimate
+- Conceptual per-member cut intent derived from the visible framing geometry
 - Material-fit suggestions, construction warnings, and invalid-geometry blockers
 - Undo/redo, local recovery autosave, and portable `.buildit.json` files
 - Git-tracked deterministic 8×10 reference design

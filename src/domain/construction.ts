@@ -3,6 +3,22 @@ import type { MaterialId } from './materials'
 export type AssemblyId = 'foundation' | 'floor' | 'walls' | 'roof'
 export type MemberLayer = 'framing' | 'sheathing' | 'finish'
 export type Vector3Tuple = [number, number, number]
+export type ProfilePoint = [number, number]
+
+export interface CutInstruction {
+  id: string
+  label: string
+  type: 'square' | 'plumb' | 'birdsmouth' | 'slope'
+  angleDeg?: number
+  depthIn?: number
+  seatLengthIn?: number
+  note?: string
+}
+
+export interface FabricationSpec {
+  longPointLengthIn: number
+  cuts: CutInstruction[]
+}
 
 export interface ConstructionMember {
   id: string
@@ -14,7 +30,9 @@ export interface ConstructionMember {
   position: Vector3Tuple
   rotation?: Vector3Tuple
   cutLengthIn?: number
-  shape?: 'box' | 'gable'
+  shape?: 'box' | 'gable' | 'profile'
+  profile?: ProfilePoint[]
+  fabrication?: FabricationSpec
 }
 
 export interface SurfaceQuantity {

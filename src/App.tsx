@@ -272,6 +272,29 @@ export default function App() {
                   </div>
                 ) : null}
               </dl>
+              {selectedMember.fabrication ? (
+                <div className="fabrication-details">
+                  <h4>Cut details</h4>
+                  <ul>
+                    {selectedMember.fabrication.cuts.map((cut) => (
+                      <li key={cut.id}>
+                        <strong className="fabrication-name">{cut.label}</strong>
+                        <span className="fabrication-value">
+                          {cut.angleDeg !== undefined ? `${cut.angleDeg.toFixed(1)}°` : null}
+                          {cut.seatLengthIn !== undefined
+                            ? `${cut.angleDeg !== undefined ? ' · ' : ''}${formatFeetInches(cut.seatLengthIn)} seat`
+                            : null}
+                          {cut.depthIn !== undefined
+                            ? `${cut.angleDeg !== undefined || cut.seatLengthIn !== undefined ? ' · ' : ''}${formatFeetInches(cut.depthIn)} depth`
+                            : null}
+                        </span>
+                        {cut.note ? <small className="fabrication-note">{cut.note}</small> : null}
+                      </li>
+                    ))}
+                  </ul>
+                  <p>Conceptual cut intent; verify dimensions on the built assembly.</p>
+                </div>
+              ) : null}
             </aside>
           ) : null}
 
