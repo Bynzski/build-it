@@ -8,6 +8,13 @@ test('loads, edits, and estimates the reference shed', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'BuildIt' })).toBeVisible()
   await expect(page.getByTestId('building-viewport')).toBeVisible()
   await expect(page.getByTestId('design-panel')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'X-ray' })).toHaveClass(/is-active/)
+
+  await page.getByRole('button', { name: 'Sheathing' }).click()
+  await expect(page.getByRole('button', { name: 'Sheathing' })).toHaveClass(/is-active/)
+  await page.getByRole('button', { name: 'Exterior' }).click()
+  await expect(page.getByRole('button', { name: 'Exterior' })).toHaveClass(/is-active/)
+  await page.getByRole('button', { name: 'Fit view' }).click()
 
   const widthInput = page.getByTestId('design-panel').getByRole('spinbutton').first()
   await widthInput.fill('108')

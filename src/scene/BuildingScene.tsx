@@ -7,10 +7,13 @@ import { getMaterial } from '../domain/materials'
 import { formatFeetInches } from '../domain/units'
 import { type BuildItProject, cloneProject, type Opening } from '../model/project'
 import { useBuildStore } from '../store/useBuildStore'
+import { cameraFitForBuilding } from './cameraFit'
 import { projectWorldAxisToScreen, type ScreenDragState, updateScreenDrag } from './dimensionDrag'
+import { memberPresentation } from './viewMode'
 
 interface BuildingSceneProps {
   building: GeneratedBuilding
+  fitViewRequest: number
 }
 
 function MemberMesh({ member }: { member: ConstructionMember }) {
@@ -22,13 +25,9 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
   const material = getMaterial(member.materialId)
   const selected = selectedMemberId === member.id
   const assemblyVisible = layerVisibility[member.assembly === 'walls' ? 'walls' : member.assembly]
-  const layerVisible =
-    viewMode === 'both' ||
-    (viewMode === 'framing' && member.layer === 'framing') ||
-    (viewMode === 'envelope' && member.layer !== 'framing')
-
-  const isTransparent = viewMode === 'both' && member.layer !== 'framing'
-  const opacity = isTransparent ? (member.layer === 'finish' ? 0.2 : 0.12) : 0.92
+  const presentation = memberPresentation(viewMode, member.layer)
+  const isTransparent = presentation.transparent
+  const opacity = presentation.opacity
   const isSheetPanel = member.label.includes(' panel ')
   const gableShape = useMemo(() => {
     const shape = new THREE.Shape()
@@ -49,7 +48,7 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
     return shape
   }, [member.profile])
 
-  if (!assemblyVisible || !layerVisible) return null
+  if (!assemblyVisible || !presentation.visible) return null
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: React Three Fiber meshes are canvas objects, not DOM elements.
@@ -344,7 +343,54 @@ function DimensionHandle({
   )
 }
 
-function SceneContents({ building }: BuildingSceneProps) {
+interface DefaultControls {
+  target: THREE.Vector3
+  update: () => void
+}
+
+function FitViewController({
+  building,
+  request,
+}: {
+  building: GeneratedBuilding
+  request: number
+}) {
+  const project = useBuildStore((state) => state.project)
+  const camera = useThree((state) => state.camera)
+  const controls = useThree((state) => state.controls) as DefaultControls | null
+  const fitInputs = useRef({
+    widthIn: project.dimensions.widthIn,
+    lengthIn: project.dimensions.lengthIn,
+    peakHeightIn: building.metrics.peakHeightIn,
+    overhangIn: project.roof.overhangIn,
+  })
+  fitInputs.current = {
+    widthIn: project.dimensions.widthIn,
+    lengthIn: project.dimensions.lengthIn,
+    peakHeightIn: building.metrics.peakHeightIn,
+    overhangIn: project.roof.overhangIn,
+  }
+
+  useEffect(() => {
+    if (request === 0 || !controls) return
+    const inputs = fitInputs.current
+    const fit = cameraFitForBuilding(
+      inputs.widthIn,
+      inputs.lengthIn,
+      inputs.peakHeightIn,
+      inputs.overhangIn,
+    )
+    camera.position.set(...fit.position)
+    controls.target.set(...fit.target)
+    camera.lookAt(...fit.target)
+    camera.updateProjectionMatrix()
+    controls.update()
+  }, [camera, controls, request])
+
+  return null
+}
+
+function SceneContents({ building, fitViewRequest }: BuildingSceneProps) {
   const project = useBuildStore((state) => state.project)
   const selectMember = useBuildStore((state) => state.selectMember)
   const selectOpening = useBuildStore((state) => state.selectOpening)
@@ -434,26 +480,27 @@ function SceneContents({ building }: BuildingSceneProps) {
         makeDefault
         target={[0, wallBase + wallHeightIn * 0.45, 0]}
         minDistance={80}
-        maxDistance={620}
+        maxDistance={1400}
         maxPolarAngle={Math.PI / 2.02}
         enableDamping
         enabled={!dimensionDragging}
       />
+      <FitViewController building={building} request={fitViewRequest} />
     </>
   )
 }
 
-export function BuildingScene({ building }: BuildingSceneProps) {
+export function BuildingScene({ building, fitViewRequest }: BuildingSceneProps) {
   const cameraPosition = useMemo<[number, number, number]>(() => [190, 155, 215], [])
 
   return (
     <Canvas
       shadows
       dpr={[1, 1.75]}
-      camera={{ position: cameraPosition, fov: 42, near: 1, far: 1200 }}
+      camera={{ position: cameraPosition, fov: 42, near: 1, far: 2400 }}
       gl={{ antialias: true, alpha: false }}
     >
-      <SceneContents building={building} />
+      <SceneContents building={building} fitViewRequest={fitViewRequest} />
     </Canvas>
   )
 }

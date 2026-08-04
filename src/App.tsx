@@ -20,8 +20,9 @@ type PanelTab = 'design' | 'materials' | 'guidance'
 
 const viewModes: Array<{ value: ViewMode; label: string }> = [
   { value: 'framing', label: 'Framing' },
-  { value: 'both', label: 'Both' },
-  { value: 'envelope', label: 'Envelope' },
+  { value: 'sheathing', label: 'Sheathing' },
+  { value: 'exterior', label: 'Exterior' },
+  { value: 'xray', label: 'X-ray' },
 ]
 
 export default function App() {
@@ -43,6 +44,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<PanelTab>('design')
   const [status, setStatus] = useState<string>('Reference design loaded')
   const [hydrated, setHydrated] = useState(false)
+  const [fitViewRequest, setFitViewRequest] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const building = useMemo(() => generateBuilding(project), [project])
@@ -222,13 +224,20 @@ export default function App() {
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              className="fit-view-button"
+              onClick={() => setFitViewRequest((request) => request + 1)}
+            >
+              Fit view
+            </button>
             <button type="button" className="reset-button" onClick={() => void handleReset()}>
               Reset reference
             </button>
           </div>
 
           <div className="viewport-canvas" data-testid="building-viewport">
-            <BuildingScene building={building} />
+            <BuildingScene building={building} fitViewRequest={fitViewRequest} />
           </div>
 
           <div className="dimension-readout">

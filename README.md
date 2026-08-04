@@ -6,7 +6,7 @@ BuildIt is a local-first, material-aware 3D designer for basic sheds, cabins, an
 
 ## Current MVP
 
-- Interactive 3D framing and envelope views
+- Interactive framing, sheathing, finished-exterior, and X-ray views with camera fit
 - Drag handles and exact width, length, and wall-height inputs
 - Skid foundation, platform floor, framed walls, gable roof, doors, and windows
 - Explicit 4×8 floor, wall, gable, and roof panel layouts with staggered joints and opening cuts

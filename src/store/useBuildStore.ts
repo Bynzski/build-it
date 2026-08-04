@@ -6,8 +6,9 @@ import {
   parseProject,
   referenceDesign,
 } from '../model/project'
+import type { ViewMode } from '../scene/viewMode'
 
-export type ViewMode = 'framing' | 'envelope' | 'both'
+export type { ViewMode } from '../scene/viewMode'
 
 export interface LayerVisibility {
   foundation: boolean
@@ -81,7 +82,7 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
     future: [],
     selectedMemberId: null,
     selectedOpeningId: null,
-    viewMode: 'both',
+    viewMode: 'xray',
     layerVisibility: {
       foundation: true,
       floor: true,
@@ -168,7 +169,7 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
     },
     selectMember: (id) => set({ selectedMemberId: id, selectedOpeningId: null }),
     selectOpening: (id) => set({ selectedOpeningId: id, selectedMemberId: null }),
-    setViewMode: (viewMode) => set({ viewMode }),
+    setViewMode: (viewMode) => set({ viewMode, selectedMemberId: null }),
     toggleLayer: (layer) =>
       set((state) => ({
         layerVisibility: {

@@ -324,8 +324,8 @@ select:focus-visible {
   background: #3a6f65;
 }
 
+.fit-view-button,
 .reset-button {
-  margin-left: auto;
   padding: 9px 12px;
   border-radius: 9px;
   color: #6e7c7e;
@@ -334,6 +334,10 @@ select:focus-visible {
   font-size: 10px;
   font-weight: 700;
   backdrop-filter: blur(10px);
+}
+
+.fit-view-button {
+  margin-left: auto;
 }
 
 .dimension-readout {

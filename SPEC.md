@@ -44,6 +44,8 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 
 - Update the model immediately when design values change.
 - Show the main construction layers and framing in a simplified form.
+- Provide distinct framing, sheathing, finished-exterior, and combined X-ray inspection views.
+- Let the user fit the camera to the current building without changing the design.
 - Prevent invalid geometry, such as openings outside a wall.
 - Use inches internally and display dimensions clearly as feet and inches.
 

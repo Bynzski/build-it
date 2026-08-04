@@ -31,4 +31,12 @@ describe('BuildIt editor history', () => {
     useBuildStore.getState().removeOpening(added?.id ?? '')
     expect(useBuildStore.getState().project.openings).toHaveLength(initialCount)
   })
+
+  it('switches construction views and clears a hidden member selection', () => {
+    useBuildStore.getState().selectMember('wall-stud-1')
+    useBuildStore.getState().setViewMode('sheathing')
+
+    expect(useBuildStore.getState().viewMode).toBe('sheathing')
+    expect(useBuildStore.getState().selectedMemberId).toBeNull()
+  })
 })
