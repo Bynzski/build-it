@@ -52,6 +52,8 @@ Project JSON
 
 The construction domain under `src/domain/` does not depend on React or Three.js. Project files store authored inputs only; generated meshes and material totals are rebuilt on load.
 
+Width and length are outside-to-outside framing dimensions. Shared construction conventions—including panel sizes, joint spacing, sheathing corner ownership, and exterior trim—live in `src/domain/constructionRules.ts` rather than being special-cased per design.
+
 Important paths:
 
 - `designs/8x10-shed.buildit.json` — committed reference design

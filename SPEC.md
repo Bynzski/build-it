@@ -48,6 +48,7 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Let the user fit the camera to the current building without changing the design.
 - Prevent invalid geometry, such as openings outside a wall.
 - Use inches internally and display dimensions clearly as feet and inches.
+- Treat authored width and length as outside-to-outside structural framing dimensions, not interior or finished-envelope dimensions.
 
 ### Design Interaction
 
@@ -67,6 +68,7 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Model single bottom plates, double top plates, corners, and framed openings.
 - Model the reference gable roof as paired profiled rafters, a ridge board, rafter ties, supported rake overhangs, and slope-cut gable framing.
 - Lay out sheet goods in standard 4×8 panels with explicit joints, staggered floor and roof courses, and opening/slope cuts.
+- Derive panel layouts from structural faces; use explicit corner-lap and trim rules instead of enlarging every sheet grid by finish thickness.
 - Derive visible member profiles and semantic cut intent from the same construction dimensions.
 - Apply practical rules for dimensions, framing layout, and supported openings.
 - Flag obvious construction conflicts without claiming engineering approval.

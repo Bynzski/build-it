@@ -80,6 +80,17 @@ export const materialCatalog = {
     unit: 'board',
     color: '#aa7944',
   },
+  'exterior-1x4-trim': {
+    id: 'exterior-1x4-trim',
+    name: 'Exterior 1×4 corner trim',
+    shortName: '1×4 corner trim',
+    category: 'lumber',
+    actualWidthIn: 0.75,
+    actualDepthIn: 3.5,
+    availableLengthsIn: [96, 120, 144, 192],
+    unit: 'board',
+    color: '#b88954',
+  },
   'subfloor-23-32': {
     id: 'subfloor-23-32',
     name: '23/32-inch tongue-and-groove subfloor',

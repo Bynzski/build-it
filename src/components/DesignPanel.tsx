@@ -111,7 +111,10 @@ export function DesignPanel() {
         />
       </div>
 
-      <FieldGroup title="Dimensions" description="Drag the colored handles or enter exact values.">
+      <FieldGroup
+        title="Dimensions"
+        description="Outside framing dimensions. Drag the handles or enter exact values."
+      >
         <NumberField
           label="Width"
           value={project.dimensions.widthIn}

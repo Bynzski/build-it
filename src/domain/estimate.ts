@@ -21,7 +21,7 @@ export function estimateMaterials(
   const breakdownGroups = new Map<string, ConstructionBreakdownItem>()
 
   for (const member of members) {
-    if (member.layer !== 'framing' || member.cutLengthIn === undefined) continue
+    if (member.cutLengthIn === undefined) continue
     const material = getMaterial(member.materialId)
     if (material.category !== 'lumber') continue
 
