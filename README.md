@@ -1,0 +1,68 @@
+# BuildIt
+
+BuildIt is a local-first, material-aware 3D designer for basic sheds, cabins, and small off-grid structures. The MVP uses a fully modeled 8×10 shed to connect editable dimensions, conventional wood framing, 3D geometry, guidance, and approximate material quantities.
+
+> BuildIt produces conceptual designs and planning estimates. It does not provide structural engineering, span approval, code verification, permit-ready plans, or permission to build.
+
+## Current MVP
+
+- Interactive 3D framing and envelope views
+- Drag handles and exact width, length, and wall-height inputs
+- Skid foundation, platform floor, framed walls, gable roof, doors, and windows
+- Configurable common framing sizes and 16/24-inch spacing
+- Optional insulation and interior finish quantities
+- Live construction breakdown and grouped purchase estimate
+- Material-fit suggestions, construction warnings, and invalid-geometry blockers
+- Undo/redo, local recovery autosave, and portable `.buildit.json` files
+- Git-tracked deterministic 8×10 reference design
+
+## Run locally
+
+Requirements: Node.js 22 or newer and pnpm.
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Then open the local URL printed by Vite.
+
+## Verify
+
+```bash
+pnpm check
+pnpm build
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
+## Architecture
+
+```text
+Project JSON
+    → construction domain
+        → validation and material guidance
+        → deterministic framing and surface geometry
+        → construction breakdown and purchase estimate
+    → React Three Fiber scene
+```
+
+The construction domain under `src/domain/` does not depend on React or Three.js. Project files store authored inputs only; generated meshes and material totals are rebuilt on load.
+
+Important paths:
+
+- `designs/8x10-shed.buildit.json` — committed reference design
+- `src/model/` — project schema and versioning
+- `src/domain/` — assemblies, material catalog, estimates, guidance, and units
+- `src/scene/` — interactive 3D presentation
+- `src/store/` — editor state and undo/redo
+- `src/persistence/` — recovery and project-file workflows
+- `SPEC.md` — MVP product specification
+
+## Project files
+
+BuildIt projects are readable, versioned JSON files intended to be committed to Git. Use **Open** to load a project and **Save project** to write or download it. Browser storage is only a recovery mechanism.
+
+## License
+
+BuildIt is released under the [MIT License](LICENSE).

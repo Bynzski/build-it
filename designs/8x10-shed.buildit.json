@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "id": "reference-8x10-shed",
+  "name": "Reference 8×10 Shed",
+  "useType": "shed",
+  "dimensions": {
+    "widthIn": 96,
+    "lengthIn": 120,
+    "wallHeightIn": 96
+  },
+  "foundation": {
+    "type": "skids",
+    "skidSize": "4x6",
+    "skidCount": 3
+  },
+  "floor": {
+    "joistSize": "2x6",
+    "spacingIn": 16,
+    "sheathingMaterialId": "subfloor-23-32"
+  },
+  "walls": {
+    "studSize": "2x4",
+    "spacingIn": 16,
+    "sheathingMaterialId": "osb-7-16",
+    "sidingMaterialId": "t1-11-5-8",
+    "insulationMaterialId": null,
+    "interiorMaterialId": null
+  },
+  "roof": {
+    "type": "gable",
+    "pitchRise": 6,
+    "overhangIn": 12,
+    "rafterSize": "2x6",
+    "spacingIn": 16,
+    "sheathingMaterialId": "osb-7-16",
+    "roofingMaterialId": "metal-roofing"
+  },
+  "openings": [
+    {
+      "id": "front-door",
+      "type": "door",
+      "wall": "front",
+      "centerOffsetIn": 0,
+      "widthIn": 36,
+      "heightIn": 80,
+      "sillHeightIn": 0
+    },
+    {
+      "id": "left-window",
+      "type": "window",
+      "wall": "left",
+      "centerOffsetIn": 0,
+      "widthIn": 24,
+      "heightIn": 36,
+      "sillHeightIn": 36
+    }
+  ],
+  "wasteFactorPct": 10
+}
