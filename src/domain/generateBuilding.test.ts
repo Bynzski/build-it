@@ -24,6 +24,9 @@ describe('construction generator', () => {
     expect(coverage.some((item) => item.materialId === 'osb-7-16')).toBe(true)
     expect(coverage.some((item) => item.materialId === 'housewrap-wrb')).toBe(true)
     expect(coverage.some((item) => item.materialId === 'metal-roofing')).toBe(true)
+    expect(building.shoppingList).toContainEqual(
+      expect.objectContaining({ materialId: 'ridge-strap', count: 3 }),
+    )
     expect(building.breakdown.some((item) => item.assembly === 'walls')).toBe(true)
   })
 
@@ -67,6 +70,16 @@ describe('construction generator', () => {
     )
   })
 
+  it('warns when a rake overhang exceeds the modeled prescriptive detail', () => {
+    const largeOverhang = cloneProject(referenceDesign)
+    largeOverhang.roof.overhangIn = 30
+    const building = generateBuilding(largeOverhang)
+
+    expect(building.guidance).toContainEqual(
+      expect.objectContaining({ level: 'warning', id: 'large-roof-overhang' }),
+    )
+  })
+
   it('adds insulation and interior finish only when selected', () => {
     const living = cloneProject(referenceDesign)
     living.walls.insulationMaterialId = 'fiberglass-r13'
@@ -104,9 +117,11 @@ describe('construction generator', () => {
     expect(frontSheathingRightEdge).toBeGreaterThanOrEqual(rightSheathingInnerFace)
   })
 
-  it('lands rafters on both gable walls and supports the rake overhang', () => {
+  it('supports the rake with dropped gable plates and cantilevered outlookers', () => {
     const building = generateBuilding(referenceDesign)
-    const gableRafters = building.members.filter((member) => member.label.includes('gable rafter'))
+    const droppedGablePlates = building.members.filter((member) =>
+      member.id.startsWith('dropped-gable-top-plate-'),
+    )
     const flyRafters = building.members.filter((member) => member.id.startsWith('fly-rafter-'))
     const lookouts = building.members.filter((member) => member.id.startsWith('rake-lookout-'))
     const roofSheathing = building.members.filter((member) =>
@@ -116,12 +131,13 @@ describe('construction generator', () => {
       .filter((member) => member.id.startsWith('rafter-') && !member.id.startsWith('rafter-tie-'))
       .map((member) => member.position[2])
 
-    expect(gableRafters).toHaveLength(4)
-    expect(new Set(gableRafters.map((member) => Math.abs(member.position[2])))).toEqual(
-      new Set([59.25]),
+    expect(droppedGablePlates).toHaveLength(4)
+    expect(new Set(droppedGablePlates.map((member) => Math.abs(member.position[2])))).toEqual(
+      new Set([58.25]),
     )
     expect(flyRafters).toHaveLength(4)
-    expect(lookouts).toHaveLength(12)
+    expect(lookouts).toHaveLength(16)
+    expect(lookouts.every((member) => member.size[0] === 1.5 && member.size[1] === 3.5)).toBe(true)
     expect(roofSheathing).toHaveLength(4)
     expect(roofSheathing.every((member) => member.size[0] <= 48)).toBe(true)
     expect(roofSheathing.every((member) => member.size[2] <= 96)).toBe(true)
@@ -431,6 +447,20 @@ describe('construction generator', () => {
     expect(birdsmouth?.depthIn).toBeCloseTo(1.565, 2)
   })
 
+  it('keeps fly rafters straight and free of unsupported birdsmouth cuts', () => {
+    const building = generateBuilding(referenceDesign)
+    const flyRafters = building.members.filter((member) => member.id.startsWith('fly-rafter-'))
+
+    expect(flyRafters).toHaveLength(4)
+    expect(flyRafters.every((member) => member.shape === 'profile')).toBe(true)
+    expect(
+      flyRafters.every(
+        (member) => !member.fabrication?.cuts.some((cut) => cut.type === 'birdsmouth'),
+      ),
+    ).toBe(true)
+    expect(flyRafters.every((member) => member.fabrication?.cuts.length === 2)).toBe(true)
+  })
+
   it('adds tied rafter pairs and slope-cut gable studs', () => {
     const building = generateBuilding(referenceDesign)
     const rafters = building.members.filter(
@@ -479,7 +509,7 @@ describe('construction generator', () => {
     expect(birdsmouth?.depthIn).toBeLessThanOrEqual(7.25 / 3)
   })
 
-  it('cuts rake lookouts to the clear distance between gable and fly rafters', () => {
+  it('extends rake outlookers from the fly rafter to the first full common rafter', () => {
     const building = generateBuilding(referenceDesign)
     const lookout = building.members.find(
       (member) => member.id.startsWith('rake-lookout-') && member.position[2] > 0,
@@ -488,13 +518,47 @@ describe('construction generator', () => {
       (member) => member.id.startsWith('fly-rafter-') && member.position[2] > 0,
     )
 
-    expect(lookout?.cutLengthIn).toBeCloseTo(10.5)
-    expect(lookout?.size[2]).toBeCloseTo(10.5)
-    expect((lookout?.position[2] ?? 0) - (lookout?.size[2] ?? 0) / 2).toBeCloseTo(60)
+    expect(lookout?.cutLengthIn).toBeCloseTo(26.5)
+    expect(lookout?.size[2]).toBeCloseTo(26.5)
+    expect((lookout?.position[2] ?? 0) - (lookout?.size[2] ?? 0) / 2).toBeCloseTo(44)
     expect((lookout?.position[2] ?? 0) + (lookout?.size[2] ?? 0) / 2).toBeCloseTo(
       (flyRafter?.position[2] ?? 0) - (flyRafter?.size[2] ?? 0) / 2,
     )
     expect(lookout?.fabrication?.cuts.map((cut) => cut.type)).toEqual(['square', 'square'])
+  })
+
+  it('ties roof endpoints together with ridge straps and eave subfascia', () => {
+    const building = generateBuilding(referenceDesign)
+    const straps = building.members
+      .filter((member) => member.id.startsWith('ridge-strap-'))
+      .sort((a, b) => a.position[2] - b.position[2])
+    const subfascia = building.members.filter((member) => member.id.startsWith('eave-subfascia-'))
+
+    expect(straps).toHaveLength(3)
+    expect(straps.every((member) => member.materialId === 'ridge-strap')).toBe(true)
+    expect(
+      straps
+        .slice(1)
+        .every((member, index) => member.position[2] - straps[index].position[2] <= 48),
+    ).toBe(true)
+    expect(subfascia).toHaveLength(2)
+    expect(subfascia.every((member) => member.cutLengthIn === 144)).toBe(true)
+  })
+
+  it('keeps bearing gable rafters when no rake overhang needs outlookers', () => {
+    const noOverhang = cloneProject(referenceDesign)
+    noOverhang.roof.overhangIn = 0
+    const building = generateBuilding(noOverhang)
+    const rafters = building.members.filter(
+      (member) => member.id.startsWith('rafter-') && !member.id.startsWith('rafter-tie-'),
+    )
+
+    expect(building.members.some((member) => member.id.startsWith('fly-rafter-'))).toBe(false)
+    expect(building.members.some((member) => member.id.startsWith('rake-lookout-'))).toBe(false)
+    expect(
+      building.members.some((member) => member.id.startsWith('dropped-gable-top-plate-')),
+    ).toBe(false)
+    expect(new Set(rafters.map((member) => Math.abs(member.position[2])))).toContain(59.25)
   })
 
   it('closes the floor perimeter with rim boards and butted joist ends', () => {

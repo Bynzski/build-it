@@ -143,6 +143,16 @@ export function getGuidance(project: BuildItProject): GuidanceItem[] {
     })
   }
 
+  if (project.roof.overhangIn > constructionRules.roof.cantileveredRakeMaximumOverhangIn) {
+    items.push({
+      id: 'large-roof-overhang',
+      level: 'warning',
+      title: 'Roof overhang exceeds the modeled prescriptive detail',
+      message:
+        'Rake overhangs above 24 inches need a project-specific support and connection design. BuildIt still displays the geometry but does not validate it.',
+    })
+  }
+
   if (items.length === 0) {
     items.push({
       id: 'no-guidance',

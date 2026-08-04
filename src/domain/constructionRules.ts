@@ -31,6 +31,14 @@ export const constructionRules = {
     visibleHeightIn: 1 / 8,
     openingEndExtensionIn: 3.5,
   },
+  roof: {
+    ladderRakeMaximumOverhangIn: 9,
+    cantileveredRakeMaximumOverhangIn: 24,
+    outlookerSpacingIn: 16,
+    outlookerDepthIn: 3.5,
+    ridgeConnectionMaximumSpacingIn: 48,
+    ridgeStrapRunIn: 12,
+  },
   site: {
     minimumUntreatedWoodClearanceIn: 6,
   },

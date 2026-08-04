@@ -116,6 +116,15 @@ export const materialCatalog = {
     unit: '10-foot piece',
     color: '#b8c1c2',
   },
+  'ridge-strap': {
+    id: 'ridge-strap',
+    name: '1-1/4-inch 20-gauge ridge strap',
+    shortName: 'Ridge strap',
+    category: 'linear',
+    availableLengthsIn: [36],
+    unit: '36-inch strap',
+    color: '#9eaaac',
+  },
   'housewrap-wrb': {
     id: 'housewrap-wrb',
     name: 'Housewrap water-resistive barrier',

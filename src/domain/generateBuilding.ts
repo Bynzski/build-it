@@ -1311,9 +1311,13 @@ function addGableEndFraming(
   context: GeneratorContext,
   wallBaseIn: number,
   riseIn: number,
+  roofTopY: (horizontalRunIn: number) => number,
   roofBottomY: (horizontalRunIn: number) => number,
   ridgeBottomY: number,
+  ridgeFaceRunIn: number,
+  roofAngleRad: number,
   roofAngleDeg: number,
+  useDroppedRake: boolean,
 ): number {
   const { project } = context
   const { widthIn, lengthIn, wallHeightIn } = project.dimensions
@@ -1324,6 +1328,9 @@ function addGableEndFraming(
   const baseY = wallBaseIn + wallHeightIn
   const gableAreaSqIn = widthIn * riseIn
   const framingPlane = lengthIn / 2 - studDepth / 2
+  const roofCosine = Math.cos(roofAngleRad)
+  const droppedTopPlateTopOffset = constructionRules.roof.outlookerDepthIn
+  const droppedTopPlateBottomOffset = droppedTopPlateTopOffset + constructionRules.plateThicknessIn
   const gableLayoutPositions = edgeDatumMemberCenters(widthIn, widthIn, project.walls.spacingIn)
   const claddingPanelJoints = positivePanelSegments(riseIn, cladding.panelHeightIn)
     .slice(0, -1)
@@ -1341,8 +1348,16 @@ function addGableEndFraming(
       const left = x - PLATE_THICKNESS / 2
       const right = x + PLATE_THICKNESS / 2
       const centeredAtRidge = Math.abs(x) < 0.01
-      const topLeft = centeredAtRidge ? ridgeBottomY : roofBottomY(Math.abs(left))
-      const topRight = centeredAtRidge ? ridgeBottomY : roofBottomY(Math.abs(right))
+      const topLeft = centeredAtRidge
+        ? ridgeBottomY
+        : useDroppedRake
+          ? roofTopY(Math.abs(left)) - droppedTopPlateBottomOffset / roofCosine
+          : roofBottomY(Math.abs(left))
+      const topRight = centeredAtRidge
+        ? ridgeBottomY
+        : useDroppedRake
+          ? roofTopY(Math.abs(right)) - droppedTopPlateBottomOffset / roofCosine
+          : roofBottomY(Math.abs(right))
       const longPointLength = Math.max(topLeft, topRight) - baseY
       if (longPointLength <= 0.5) continue
       const geometry = profileGeometry(
@@ -1373,9 +1388,59 @@ function addGableEndFraming(
               angleDeg: centeredAtRidge ? undefined : roofAngleDeg,
               note: centeredAtRidge
                 ? 'Cut square beneath the ridge board.'
-                : 'Long point follows the underside of the common rafter.',
+                : useDroppedRake
+                  ? 'Long point follows the underside of the dropped gable top plate.'
+                  : 'Long point follows the underside of the gable rafter.',
             },
             { id: 'bottom-square', label: 'Bottom square cut', type: 'square' },
+          ],
+        },
+      })
+    }
+
+    for (const side of useDroppedRake ? ([-1, 1] as const) : []) {
+      const signed = (horizontalRunIn: number): number => side * horizontalRunIn
+      const plateTop = (horizontalRunIn: number) =>
+        roofTopY(horizontalRunIn) - droppedTopPlateTopOffset / roofCosine
+      const plateBottom = (horizontalRunIn: number) =>
+        roofTopY(horizontalRunIn) - droppedTopPlateBottomOffset / roofCosine
+      const plateSlopeLength = Math.hypot(
+        widthIn / 2 - ridgeFaceRunIn,
+        (widthIn / 2 - ridgeFaceRunIn) * Math.tan(roofAngleRad),
+      )
+
+      addMember(context, {
+        label: `${wall.id} ${side === -1 ? 'left' : 'right'} dropped gable top plate`,
+        assembly: 'walls',
+        layer: 'framing',
+        materialId: studMaterial,
+        ...profileGeometry(
+          [
+            [signed(ridgeFaceRunIn), plateBottom(ridgeFaceRunIn)],
+            [signed(widthIn / 2), plateBottom(widthIn / 2)],
+            [signed(widthIn / 2), plateTop(widthIn / 2)],
+            [signed(ridgeFaceRunIn), plateTop(ridgeFaceRunIn)],
+          ],
+          studDepth,
+          wall.fixedIn,
+        ),
+        cutLengthIn: plateSlopeLength,
+        idHint: 'dropped-gable-top-plate',
+        fabrication: {
+          longPointLengthIn: plateSlopeLength,
+          cuts: [
+            {
+              id: 'ridge-plumb',
+              label: 'Ridge plumb cut',
+              type: 'plumb',
+              angleDeg: roofAngleDeg,
+            },
+            {
+              id: 'eave-plumb',
+              label: 'Eave plumb cut',
+              type: 'plumb',
+              angleDeg: roofAngleDeg,
+            },
           ],
         },
       })
@@ -1565,7 +1630,7 @@ function addRoof(
   const birdsmouthDepth = (roofBase - bottomY(run)) * cosine
   const rise = run * pitch
 
-  const rafterGeometry = (side: -1 | 1, fixedIn: number) => {
+  const bearingRafterGeometry = (side: -1 | 1, fixedIn: number) => {
     const signed = (horizontalRunIn: number): number => side * horizontalRunIn
     return profileGeometry(
       [
@@ -1573,6 +1638,20 @@ function addRoof(
         [signed(run - birdsmouthSeatLength), roofBase],
         [signed(run), roofBase],
         [signed(run), bottomY(run)],
+        [signed(extendedRun), bottomY(extendedRun)],
+        [signed(extendedRun), topY(extendedRun)],
+        [signed(ridgeFaceRun), topY(ridgeFaceRun)],
+      ],
+      rafterThickness,
+      fixedIn,
+    )
+  }
+
+  const flyRafterGeometry = (side: -1 | 1, fixedIn: number) => {
+    const signed = (horizontalRunIn: number): number => side * horizontalRunIn
+    return profileGeometry(
+      [
+        [signed(ridgeFaceRun), bottomY(ridgeFaceRun)],
         [signed(extendedRun), bottomY(extendedRun)],
         [signed(extendedRun), topY(extendedRun)],
         [signed(ridgeFaceRun), topY(ridgeFaceRun)],
@@ -1613,30 +1692,71 @@ function addRoof(
     ],
   }
 
+  const flyRafterFabrication: FabricationSpec = {
+    longPointLengthIn: rafterLongPointLength,
+    cuts: [
+      {
+        id: 'ridge-plumb',
+        label: 'Ridge plumb cut',
+        type: 'plumb',
+        angleDeg,
+        note: 'Long point butts against the face of the ridge board.',
+      },
+      {
+        id: 'tail-plumb',
+        label: 'Tail plumb cut',
+        type: 'plumb',
+        angleDeg,
+        note: 'Straight fly rafter forms the rake subfascia; it has no wall-bearing notch.',
+      },
+    ],
+  }
+
   const gableAreaSqIn = addGableEndFraming(
     context,
     wallBaseIn,
     rise,
+    topY,
     bottomY,
     ridgeBottomY,
+    ridgeFaceRun,
+    angle,
     angleDeg,
+    overhang > 0,
   )
-  const structuralRafterPositions = edgeDatumMemberCenters(
+  const baseRafterPositions = edgeDatumMemberCenters(
     lengthIn,
     lengthIn,
     project.roof.spacingIn,
     rafterThickness,
   )
+  const gableRafterCenter = (lengthIn - rafterThickness) / 2
+  const anchorRafterCenter = Math.max(0, gableRafterCenter - project.roof.spacingIn)
+  const structuralRafterPositions = (
+    overhang > 0
+      ? [
+          ...baseRafterPositions.filter(
+            (position) => Math.abs(position) < anchorRafterCenter - 0.01,
+          ),
+          -anchorRafterCenter,
+          anchorRafterCenter,
+        ]
+      : baseRafterPositions
+  )
+    .filter(
+      (position, index, positions) =>
+        positions.findIndex((candidate) => Math.abs(candidate - position) < 0.01) === index,
+    )
+    .sort((a, b) => a - b)
 
   for (const z of structuralRafterPositions) {
-    const atGable = Math.abs(Math.abs(z) - (lengthIn - rafterThickness) / 2) < 0.01
     for (const side of [-1, 1] as const) {
       addMember(context, {
-        label: `${atGable ? (z > 0 ? 'Front gable' : 'Back gable') : side === -1 ? 'Left' : 'Right'} rafter`,
+        label: `${side === -1 ? 'Left' : 'Right'} common rafter`,
         assembly: 'roof',
         layer: 'framing',
         materialId: rafterMaterial,
-        ...rafterGeometry(side, z),
+        ...bearingRafterGeometry(side, z),
         cutLengthIn: rafterLongPointLength,
         idHint: 'rafter',
         fabrication: rafterFabrication,
@@ -1664,11 +1784,19 @@ function addRoof(
     })
   }
 
+  const outlookerSlopeDistances: number[] = []
+  for (
+    let slopeDistance = constructionRules.roof.outlookerSpacingIn;
+    slopeDistance < roofSlopeLength - PLATE_THICKNESS / 2;
+    slopeDistance += constructionRules.roof.outlookerSpacingIn
+  ) {
+    outlookerSlopeDistances.push(slopeDistance)
+  }
+
   if (overhang > 0) {
     const flyRafterOffset = roofLength / 2 - rafterThickness / 2
-    const lookoutLength = Math.max(overhang - rafterThickness, 0)
-    const lookoutNormalOffset = rafterDepth / 2 - PLATE_THICKNESS / 2
-    const lookoutRuns = [extendedRun * 0.2, extendedRun * 0.52, extendedRun * 0.84]
+    const outlookerLength = Math.max(flyRafterOffset - anchorRafterCenter - rafterThickness, 0)
+    const outlookerNormalOffset = rafterDepth / 2 - constructionRules.roof.outlookerDepthIn / 2
 
     for (const end of [-1, 1] as const) {
       for (const side of [-1, 1] as const) {
@@ -1678,31 +1806,32 @@ function addRoof(
           assembly: 'roof',
           layer: 'framing',
           materialId: rafterMaterial,
-          ...rafterGeometry(side, end * flyRafterOffset),
+          ...flyRafterGeometry(side, end * flyRafterOffset),
           cutLengthIn: rafterLongPointLength,
           idHint: 'fly-rafter',
-          fabrication: rafterFabrication,
+          fabrication: flyRafterFabrication,
         })
 
-        for (const lookoutRun of lookoutLength > 0 ? lookoutRuns : []) {
-          const centerlineX = side * lookoutRun
-          const centerlineY = centerPeakY - lookoutRun * pitch
+        for (const slopeDistance of outlookerLength > 0 ? outlookerSlopeDistances : []) {
+          const horizontalRun = slopeDistance * cosine
+          const centerlineX = side * horizontalRun
+          const centerlineY = centerPeakY - horizontalRun * pitch
           addMember(context, {
             label: `${end === 1 ? 'Front' : 'Back'} rake lookout`,
             assembly: 'roof',
             layer: 'framing',
             materialId: '2x4',
-            size: [3.5, PLATE_THICKNESS, lookoutLength],
+            size: [PLATE_THICKNESS, constructionRules.roof.outlookerDepthIn, outlookerLength],
             position: [
-              centerlineX + side * Math.sin(angle) * lookoutNormalOffset,
-              centerlineY + Math.cos(angle) * lookoutNormalOffset,
-              end * (lengthIn / 2 + overhang / 2 - rafterThickness / 2),
+              centerlineX + side * Math.sin(angle) * outlookerNormalOffset,
+              centerlineY + Math.cos(angle) * outlookerNormalOffset,
+              (end * (anchorRafterCenter + flyRafterOffset)) / 2,
             ],
             rotation: [0, 0, rotationZ],
-            cutLengthIn: lookoutLength,
+            cutLengthIn: outlookerLength,
             idHint: 'rake-lookout',
             fabrication: {
-              longPointLengthIn: lookoutLength,
+              longPointLengthIn: outlookerLength,
               cuts: [
                 { id: 'inner-square', label: 'Inner square cut', type: 'square' },
                 { id: 'outer-square', label: 'Outer square cut', type: 'square' },
@@ -1712,6 +1841,23 @@ function addRoof(
         }
       }
     }
+  }
+
+  for (const side of [-1, 1] as const) {
+    addMember(context, {
+      label: `${side === -1 ? 'Left' : 'Right'} eave subfascia`,
+      assembly: 'roof',
+      layer: 'framing',
+      materialId: rafterMaterial,
+      size: [rafterThickness, rafterDepth, roofLength],
+      position: [
+        side * (extendedRun + rafterThickness / 2),
+        topY(extendedRun) - rafterDepth / 2,
+        0,
+      ],
+      cutLengthIn: roofLength,
+      idHint: 'eave-subfascia',
+    })
   }
 
   addMember(context, {
@@ -1724,6 +1870,61 @@ function addRoof(
     cutLengthIn: roofLength,
     idHint: 'ridge-board',
   })
+
+  const ridgeConnectionPositions: number[] = []
+  let ridgePositionIndex = 0
+  while (ridgePositionIndex < structuralRafterPositions.length) {
+    ridgeConnectionPositions.push(structuralRafterPositions[ridgePositionIndex])
+    if (ridgePositionIndex === structuralRafterPositions.length - 1) break
+    let nextIndex = ridgePositionIndex + 1
+    while (
+      nextIndex + 1 < structuralRafterPositions.length &&
+      structuralRafterPositions[nextIndex + 1] - structuralRafterPositions[ridgePositionIndex] <=
+        constructionRules.roof.ridgeConnectionMaximumSpacingIn
+    ) {
+      nextIndex += 1
+    }
+    ridgePositionIndex = nextIndex
+  }
+
+  const strapSlopeLength = constructionRules.roof.ridgeStrapRunIn
+  const strapHorizontalRun = strapSlopeLength * cosine
+  const strapThickness = 1 / 16
+  const strapTopAtRun = topY(strapHorizontalRun)
+  const strapTopAtRidge = topY(ridgeFaceRun)
+  const strapInsetX = Math.sin(angle) * strapThickness
+  const strapInsetY = Math.cos(angle) * strapThickness
+  for (const z of ridgeConnectionPositions) {
+    addMember(context, {
+      label: 'Rafter-pair ridge strap',
+      assembly: 'roof',
+      layer: 'framing',
+      materialId: 'ridge-strap',
+      ...profileGeometry(
+        [
+          [-strapHorizontalRun, strapTopAtRun],
+          [-ridgeFaceRun, strapTopAtRidge],
+          [ridgeFaceRun, strapTopAtRidge],
+          [strapHorizontalRun, strapTopAtRun],
+          [strapHorizontalRun - strapInsetX, strapTopAtRun - strapInsetY],
+          [ridgeFaceRun - strapInsetX, strapTopAtRidge - strapInsetY],
+          [-ridgeFaceRun + strapInsetX, strapTopAtRidge - strapInsetY],
+          [-strapHorizontalRun + strapInsetX, strapTopAtRun - strapInsetY],
+        ],
+        1.25,
+        z,
+      ),
+      cutLengthIn: strapSlopeLength * 2 + ridgeThickness,
+      idHint: 'ridge-strap',
+      fabrication: {
+        longPointLengthIn: strapSlopeLength * 2 + ridgeThickness,
+        cuts: [
+          { id: 'left-square', label: 'Left square cut', type: 'square' },
+          { id: 'right-square', label: 'Right square cut', type: 'square' },
+        ],
+      },
+    })
+  }
 
   const roofPanelSupportPositions = [...structuralRafterPositions]
   if (overhang > 0) {
@@ -1741,6 +1942,11 @@ function addRoof(
     for (const slopeDistance of roofPanelJoints) {
       const horizontalRun = slopeDistance * cosine
       for (let index = 0; index < roofPanelSupportPositions.length - 1; index += 1) {
+        const atRakeBay = index === 0 || index === roofPanelSupportPositions.length - 2
+        const matchesOutlooker = outlookerSlopeDistances.some(
+          (outlookerDistance) => Math.abs(outlookerDistance - slopeDistance) < 0.01,
+        )
+        if (atRakeBay && matchesOutlooker) continue
         const clearLength =
           roofPanelSupportPositions[index + 1] - roofPanelSupportPositions[index] - rafterThickness
         if (clearLength <= 0.5) continue

@@ -90,7 +90,13 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
         emissive={selected ? '#6d3a00' : '#000000'}
         emissiveIntensity={selected ? 0.35 : 0}
         roughness={0.78}
-        metalness={member.materialId === 'metal-roofing' ? 0.32 : 0.02}
+        metalness={
+          member.materialId === 'metal-roofing' ||
+          member.materialId === 'z-flashing' ||
+          member.materialId === 'ridge-strap'
+            ? 0.32
+            : 0.02
+        }
         transparent={isTransparent}
         opacity={opacity}
         depthWrite={!isTransparent}
