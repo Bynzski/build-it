@@ -52,7 +52,7 @@ Project JSON
 
 The construction domain under `src/domain/` does not depend on React or Three.js. Project files store authored inputs only; generated meshes and material totals are rebuilt on load.
 
-Width and length are outside-to-outside framing dimensions. Shared construction conventions—including panel sizes, joint spacing, sheathing corner ownership, and exterior trim—live in `src/domain/constructionRules.ts` rather than being special-cased per design.
+Width and length are outside-to-outside framing dimensions. Studs, joists, rafters, and panel seams share that outside-edge layout datum; structural panel end joints must land on framing, and interrupted edges receive modeled backing or blocking. Shared construction conventions—including panel sizes, joint spacing, sheathing corner ownership, and exterior trim—live in the domain layer rather than being special-cased per design.
 
 Important paths:
 

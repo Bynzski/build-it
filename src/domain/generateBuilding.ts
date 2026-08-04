@@ -11,6 +11,7 @@ import type {
 } from './construction'
 import { constructionRules, wallPanelLayoutSpan } from './constructionRules'
 import { estimateMaterials } from './estimate'
+import { edgeDatumMemberCenters, supportAwarePanelSegments } from './framingLayout'
 import { getGuidance } from './guidance'
 import { getMaterial, type MaterialId } from './materials'
 
@@ -201,30 +202,6 @@ function profileGeometry(
   }
 }
 
-function memberPositions(spanIn: number, spacingIn: number): number[] {
-  const positions = [-spanIn / 2]
-  for (
-    let position = -spanIn / 2 + spacingIn;
-    position < spanIn / 2 - 0.01;
-    position += spacingIn
-  ) {
-    positions.push(position)
-  }
-  const lastPosition = positions.at(-1) ?? -spanIn / 2
-  if (Math.abs(lastPosition - spanIn / 2) > 0.01) positions.push(spanIn / 2)
-  return positions
-}
-
-function memberCenterPositions(spanIn: number, spacingIn: number, memberWidthIn = 1.5): number[] {
-  return memberPositions(Math.max(spanIn - memberWidthIn, 0), spacingIn)
-}
-
-function centeredMemberPositions(spanIn: number, spacingIn: number, memberWidthIn = 1.5): number[] {
-  const positions = new Set(memberCenterPositions(spanIn, spacingIn, memberWidthIn))
-  positions.add(0)
-  return [...positions].sort((a, b) => a - b)
-}
-
 function lumberDimensions(materialId: MaterialId): [number, number] {
   const material = getMaterial(materialId)
   return [material.actualWidthIn ?? 1.5, material.actualDepthIn ?? 3.5]
@@ -289,7 +266,12 @@ function addFloor(context: GeneratorContext): { wallBaseIn: number; floorAreaSqI
     })
   }
 
-  const floorJoistPositions = memberCenterPositions(lengthIn, project.floor.spacingIn, joistWidth)
+  const floorJoistPositions = edgeDatumMemberCenters(
+    lengthIn,
+    lengthIn,
+    project.floor.spacingIn,
+    joistWidth,
+  )
   for (const [index, z] of floorJoistPositions.entries()) {
     const atBack = index === 0
     const atFront = index === floorJoistPositions.length - 1
@@ -306,21 +288,26 @@ function addFloor(context: GeneratorContext): { wallBaseIn: number; floorAreaSqI
   }
 
   const subfloorY = skidDepth + joistDepth + SUBFLOOR_THICKNESS / 2
-  const subfloorCourses = insetPanelJoints(panelSegments(lengthIn, PANEL_LONG_EDGE))
+  const subfloorRows = insetPanelJoints(panelSegments(widthIn, PANEL_SHORT_EDGE))
   let subfloorPanel = 0
-  for (const [courseIndex, rawZ] of subfloorCourses.entries()) {
-    const xSegments = insetPanelJoints(
-      panelSegments(widthIn, PANEL_SHORT_EDGE, courseIndex % 2 === 1 ? PANEL_SHORT_EDGE / 2 : 0),
+  for (const [rowIndex, x] of subfloorRows.entries()) {
+    const lengthSegments = insetPanelJoints(
+      supportAwarePanelSegments(
+        lengthIn,
+        PANEL_LONG_EDGE,
+        floorJoistPositions,
+        rowIndex % 2 === 0 ? PANEL_LONG_EDGE : PANEL_SHORT_EDGE,
+      ),
     )
-    for (const x of xSegments) {
+    for (const length of lengthSegments) {
       subfloorPanel += 1
       addMember(context, {
         label: `Subfloor panel ${subfloorPanel}`,
         assembly: 'floor',
         layer: 'sheathing',
         materialId: project.floor.sheathingMaterialId,
-        size: [x.end - x.start, SUBFLOOR_THICKNESS, rawZ.end - rawZ.start],
-        position: [(x.start + x.end) / 2, subfloorY, (rawZ.start + rawZ.end) / 2],
+        size: [x.end - x.start, SUBFLOOR_THICKNESS, length.end - length.start],
+        position: [(x.start + x.end) / 2, subfloorY, (length.start + length.end) / 2],
         idHint: 'subfloor-panel',
       })
     }
@@ -414,7 +401,7 @@ function addOpeningFraming(
   wallHeightIn: number,
   studMaterial: MaterialId,
   studDepth: number,
-  studSpacingIn: number,
+  layoutPositions: number[],
 ): void {
   const left = opening.centerOffsetIn - opening.widthIn / 2
   const right = opening.centerOffsetIn + opening.widthIn / 2
@@ -485,13 +472,13 @@ function addOpeningFraming(
 
     const crippleBase = studBase
     const crippleLength = opening.sillHeightIn - PLATE_THICKNESS * 2
-    for (const position of memberPositions(opening.widthIn - 3, studSpacingIn)) {
+    for (const position of openingCripplePositions(opening, layoutPositions)) {
       addVerticalWallMember(
         context,
         wall,
         studMaterial,
         studDepth,
-        opening.centerOffsetIn + position,
+        position,
         crippleBase,
         crippleLength,
         'Window lower cripple',
@@ -502,18 +489,100 @@ function addOpeningFraming(
 
   const upperCrippleBase = headerBottom + headerDepth
   const upperCrippleLength = wallBaseIn + wallHeightIn - PLATE_THICKNESS * 2 - upperCrippleBase
-  for (const position of memberPositions(Math.max(opening.widthIn - 3, 1), studSpacingIn)) {
+  for (const position of openingCripplePositions(opening, layoutPositions)) {
     addVerticalWallMember(
       context,
       wall,
       studMaterial,
       studDepth,
-      opening.centerOffsetIn + position,
+      position,
       upperCrippleBase,
       upperCrippleLength,
       `${opening.type} upper cripple`,
       'cripple-stud',
     )
+  }
+}
+
+function openingCripplePositions(opening: Opening, layoutPositions: number[]): number[] {
+  const left = opening.centerOffsetIn - opening.widthIn / 2
+  const right = opening.centerOffsetIn + opening.widthIn / 2
+  const positions = layoutPositions
+    .filter((position) => position >= left - 0.01 && position <= right + 0.01)
+    .map((position) => {
+      if (position - left < PLATE_THICKNESS) return left + PLATE_THICKNESS / 2
+      if (right - position < PLATE_THICKNESS) return right - PLATE_THICKNESS / 2
+      return position
+    })
+
+  return [...new Set(positions)]
+}
+
+function subtractHorizontalRanges(segment: PanelSegment, ranges: PanelSegment[]): PanelSegment[] {
+  let segments = [segment]
+  for (const range of ranges) {
+    segments = segments.flatMap((current) => {
+      const overlapStart = Math.max(current.start, range.start)
+      const overlapEnd = Math.min(current.end, range.end)
+      if (overlapStart >= overlapEnd) return [current]
+      const pieces: PanelSegment[] = []
+      if (overlapStart - current.start > 0.5) {
+        pieces.push({ start: current.start, end: overlapStart })
+      }
+      if (current.end - overlapEnd > 0.5) {
+        pieces.push({ start: overlapEnd, end: current.end })
+      }
+      return pieces
+    })
+  }
+  return segments
+}
+
+function addWallPanelJointBlocking(
+  context: GeneratorContext,
+  wall: WallDefinition,
+  wallBaseIn: number,
+  wallHeightIn: number,
+  studMaterial: MaterialId,
+  studDepth: number,
+  layoutPositions: number[],
+  openings: Opening[],
+): void {
+  const verticalPanels = panelSegments(wallHeightIn, PANEL_LONG_EDGE)
+  const horizontalJoints = verticalPanels.slice(0, -1).map((panel) => panel.end + wallHeightIn / 2)
+
+  for (const height of horizontalJoints) {
+    const openingRanges = openings
+      .filter(
+        (opening) =>
+          height > opening.sillHeightIn + 0.01 &&
+          height < opening.sillHeightIn + opening.heightIn - 0.01,
+      )
+      .map((opening) => ({
+        start: opening.centerOffsetIn - opening.widthIn / 2,
+        end: opening.centerOffsetIn + opening.widthIn / 2,
+      }))
+
+    for (let index = 0; index < layoutPositions.length - 1; index += 1) {
+      const bay = {
+        start: layoutPositions[index] + PLATE_THICKNESS / 2,
+        end: layoutPositions[index + 1] - PLATE_THICKNESS / 2,
+      }
+      for (const blocking of subtractHorizontalRanges(bay, openingRanges)) {
+        addHorizontalWallMember(
+          context,
+          wall,
+          studMaterial,
+          studDepth,
+          (blocking.start + blocking.end) / 2,
+          wallBaseIn + height,
+          blocking.end - blocking.start,
+          PLATE_THICKNESS,
+          `${wall.id} sheathing joint blocking`,
+          'wall-panel-blocking',
+        )
+      }
+    }
   }
 }
 
@@ -558,8 +627,29 @@ function subtractOpening(rectangle: PanelRectangle, opening: Opening): PanelRect
   return pieces
 }
 
-function wallSurfaceCells(spanIn: number, heightIn: number, openings: Opening[]): SurfaceCell[] {
-  const horizontalPanels = insetPanelJoints(panelSegments(spanIn, PANEL_SHORT_EDGE))
+function extendOutsidePanelEdges(
+  segments: PanelSegment[],
+  edgeExtensionIn: number,
+): PanelSegment[] {
+  return segments.map((segment, index) => ({
+    start: segment.start - (index === 0 ? edgeExtensionIn : 0),
+    end: segment.end + (index === segments.length - 1 ? edgeExtensionIn : 0),
+  }))
+}
+
+function wallSurfaceCells(
+  layoutSpanIn: number,
+  heightIn: number,
+  openings: Opening[],
+  supportCentersIn: number[],
+  edgeExtensionIn = 0,
+): SurfaceCell[] {
+  const horizontalPanels = insetPanelJoints(
+    extendOutsidePanelEdges(
+      supportAwarePanelSegments(layoutSpanIn, PANEL_SHORT_EDGE, supportCentersIn, PANEL_SHORT_EDGE),
+      edgeExtensionIn,
+    ),
+  )
   const verticalPanels = insetPanelJoints(panelSegments(heightIn, PANEL_LONG_EDGE)).map(
     (segment) => ({
       start: segment.start + heightIn / 2,
@@ -631,8 +721,13 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
   const openings = openingOnWall(project, wall.id)
   const studLength = height - PLATE_THICKNESS * 3
   const studBase = wallBaseIn + PLATE_THICKNESS
+  const layoutPositions = edgeDatumMemberCenters(
+    wall.surfaceSpanIn,
+    wall.spanIn,
+    project.walls.spacingIn,
+  )
 
-  for (const position of memberCenterPositions(wall.spanIn, project.walls.spacingIn)) {
+  for (const position of layoutPositions) {
     if (positionInsideOpening(position, openings)) continue
     addVerticalWallMember(
       context,
@@ -683,9 +778,20 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
       height,
       studMaterial,
       studDepth,
-      project.walls.spacingIn,
+      layoutPositions,
     )
   }
+
+  addWallPanelJointBlocking(
+    context,
+    wall,
+    wallBaseIn,
+    height,
+    studMaterial,
+    studDepth,
+    layoutPositions,
+    openings,
+  )
 
   const openingArea = openings.reduce(
     (total, opening) => total + opening.widthIn * opening.heightIn,
@@ -694,8 +800,20 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
   const netArea = Math.max(0, wall.surfaceSpanIn * height - openingArea)
   const sheathingSpan = wallPanelLayoutSpan(wall.id, wall.surfaceSpanIn, 'sheathing')
   const sidingSpan = wallPanelLayoutSpan(wall.id, wall.surfaceSpanIn, 'siding')
-  const sheathingCells = wallSurfaceCells(sheathingSpan, height, openings)
-  const sidingCells = wallSurfaceCells(sidingSpan, height, openings)
+  const sheathingCells = wallSurfaceCells(
+    wall.surfaceSpanIn,
+    height,
+    openings,
+    layoutPositions,
+    (sheathingSpan - wall.surfaceSpanIn) / 2,
+  )
+  const sidingCells = wallSurfaceCells(
+    wall.surfaceSpanIn,
+    height,
+    openings,
+    layoutPositions,
+    (sidingSpan - wall.surfaceSpanIn) / 2,
+  )
 
   addWallSurfaceLayer(
     context,
@@ -814,9 +932,17 @@ function addGableSurfaceLayer(
     layer: 'sheathing' | 'finish'
     label: string
     idHint: string
+    supportCentersIn: number[]
   },
 ): void {
-  const horizontalPanels = insetPanelJoints(panelSegments(options.spanIn, PANEL_SHORT_EDGE))
+  const horizontalPanels = insetPanelJoints(
+    supportAwarePanelSegments(
+      options.spanIn,
+      PANEL_SHORT_EDGE,
+      options.supportCentersIn,
+      PANEL_SHORT_EDGE,
+    ),
+  )
   const verticalPanels = insetPanelJoints(positivePanelSegments(options.riseIn, PANEL_LONG_EDGE))
   const triangle: ProfilePoint[] = [
     [-options.spanIn / 2, 0],
@@ -867,12 +993,17 @@ function addGableEndFraming(
   const baseY = wallBaseIn + wallHeightIn
   const gableAreaSqIn = widthIn * riseIn
   const framingPlane = lengthIn / 2 - studDepth / 2
+  const gableLayoutPositions = edgeDatumMemberCenters(widthIn, widthIn, project.walls.spacingIn)
+  if (!gableLayoutPositions.some((position) => Math.abs(position) < 0.01)) {
+    gableLayoutPositions.push(0)
+    gableLayoutPositions.sort((a, b) => a - b)
+  }
 
   for (const wall of [
     { id: 'front' as const, fixedIn: framingPlane, outward: 1 as const },
     { id: 'back' as const, fixedIn: -framingPlane, outward: -1 as const },
   ]) {
-    for (const x of centeredMemberPositions(widthIn - studDepth * 2, project.walls.spacingIn)) {
+    for (const x of gableLayoutPositions) {
       const left = x - PLATE_THICKNESS / 2
       const right = x + PLATE_THICKNESS / 2
       const centeredAtRidge = Math.abs(x) < 0.01
@@ -916,6 +1047,28 @@ function addGableEndFraming(
       })
     }
 
+    const gablePanelJoints = positivePanelSegments(riseIn, PANEL_LONG_EDGE)
+      .slice(0, -1)
+      .map((panel) => panel.end)
+    for (const height of gablePanelJoints) {
+      const halfWidth = (widthIn / 2) * (1 - height / riseIn)
+      for (let index = 0; index < gableLayoutPositions.length - 1; index += 1) {
+        const start = Math.max(gableLayoutPositions[index] + PLATE_THICKNESS / 2, -halfWidth)
+        const end = Math.min(gableLayoutPositions[index + 1] - PLATE_THICKNESS / 2, halfWidth)
+        if (end - start <= 0.5) continue
+        addMember(context, {
+          label: `${wall.id} gable sheathing joint blocking`,
+          assembly: 'walls',
+          layer: 'framing',
+          materialId: studMaterial,
+          size: [end - start, PLATE_THICKNESS, studDepth],
+          position: [(start + end) / 2, baseY + height, wall.fixedIn],
+          cutLengthIn: end - start,
+          idHint: 'gable-panel-blocking',
+        })
+      }
+    }
+
     addGableSurfaceLayer(context, {
       spanIn: widthIn,
       riseIn,
@@ -926,6 +1079,7 @@ function addGableEndFraming(
       layer: 'sheathing',
       label: `${wall.id} gable sheathing`,
       idHint: 'gable-sheathing',
+      supportCentersIn: gableLayoutPositions,
     })
     addGableSurfaceLayer(context, {
       spanIn: widthIn,
@@ -939,6 +1093,7 @@ function addGableEndFraming(
       layer: 'finish',
       label: `${wall.id} gable siding`,
       idHint: 'gable-siding',
+      supportCentersIn: gableLayoutPositions,
     })
   }
 
@@ -1081,7 +1236,8 @@ function addRoof(
     ridgeBottomY,
     angleDeg,
   )
-  const structuralRafterPositions = memberCenterPositions(
+  const structuralRafterPositions = edgeDatumMemberCenters(
+    lengthIn,
     lengthIn,
     project.roof.spacingIn,
     rafterThickness,
@@ -1184,6 +1340,44 @@ function addRoof(
     idHint: 'ridge-board',
   })
 
+  const roofPanelSupportPositions = [...structuralRafterPositions]
+  if (overhang > 0) {
+    const flyRafterOffset = roofLength / 2 - rafterThickness / 2
+    roofPanelSupportPositions.push(-flyRafterOffset, flyRafterOffset)
+    roofPanelSupportPositions.sort((a, b) => a - b)
+  }
+
+  const roofPanelJoints = positivePanelSegments(roofSlopeLength, PANEL_SHORT_EDGE)
+    .slice(0, -1)
+    .map((panel) => panel.end)
+  for (const side of [-1, 1] as const) {
+    const rotationZ = side === -1 ? angle : -angle
+    const blockingNormalOffset = rafterDepth / 2 - PLATE_THICKNESS / 2
+    for (const slopeDistance of roofPanelJoints) {
+      const horizontalRun = slopeDistance * cosine
+      for (let index = 0; index < roofPanelSupportPositions.length - 1; index += 1) {
+        const clearLength =
+          roofPanelSupportPositions[index + 1] - roofPanelSupportPositions[index] - rafterThickness
+        if (clearLength <= 0.5) continue
+        addMember(context, {
+          label: `${side === -1 ? 'Left' : 'Right'} roof sheathing joint blocking`,
+          assembly: 'roof',
+          layer: 'framing',
+          materialId: '2x4',
+          size: [3.5, PLATE_THICKNESS, clearLength],
+          position: [
+            side * horizontalRun + side * Math.sin(angle) * blockingNormalOffset,
+            centerPeakY - horizontalRun * pitch + Math.cos(angle) * blockingNormalOffset,
+            (roofPanelSupportPositions[index] + roofPanelSupportPositions[index + 1]) / 2,
+          ],
+          rotation: [0, 0, rotationZ],
+          cutLengthIn: clearLength,
+          idHint: 'roof-panel-blocking',
+        })
+      }
+    }
+  }
+
   for (const side of [-1, 1] as const) {
     const rotationZ = side === -1 ? angle : -angle
     const sheathingOffset = rafterDepth / 2 + WALL_SHEATHING_THICKNESS / 2
@@ -1192,7 +1386,12 @@ function addRoof(
     let sheathingPanel = 0
     for (const [courseIndex, slope] of slopeCourses.entries()) {
       const lengthPanels = insetPanelJoints(
-        panelSegments(roofLength, PANEL_LONG_EDGE, courseIndex % 2 === 1 ? PANEL_SHORT_EDGE : 0),
+        supportAwarePanelSegments(
+          roofLength,
+          PANEL_LONG_EDGE,
+          structuralRafterPositions,
+          courseIndex % 2 === 0 ? PANEL_LONG_EDGE : PANEL_LONG_EDGE - 32,
+        ),
       )
       for (const length of lengthPanels) {
         sheathingPanel += 1

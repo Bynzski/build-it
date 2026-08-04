@@ -96,6 +96,9 @@ describe('construction generator', () => {
     const roofSheathing = building.members.filter((member) =>
       member.label.startsWith('Left roof sheathing panel'),
     )
+    const rafterCenters = building.members
+      .filter((member) => member.id.startsWith('rafter-') && !member.id.startsWith('rafter-tie-'))
+      .map((member) => member.position[2])
 
     expect(gableRafters).toHaveLength(4)
     expect(new Set(gableRafters.map((member) => Math.abs(member.position[2])))).toEqual(
@@ -106,6 +109,17 @@ describe('construction generator', () => {
     expect(roofSheathing).toHaveLength(4)
     expect(roofSheathing.every((member) => member.size[0] <= 48)).toBe(true)
     expect(roofSheathing.every((member) => member.size[2] <= 96)).toBe(true)
+    const roofCourses = [...new Set(roofSheathing.map((member) => member.position[0]))]
+    const roofSeams = roofCourses.map((course) => {
+      const panels = roofSheathing
+        .filter((member) => member.position[0] === course)
+        .sort((a, b) => a.position[2] - b.position[2])
+      const firstEnd = panels[0].position[2] + panels[0].size[2] / 2
+      const secondStart = panels[1].position[2] - panels[1].size[2] / 2
+      return (firstEnd + secondStart) / 2
+    })
+    expect(roofSeams.sort((a, b) => a - b)).toEqual([-12, 20])
+    expect(roofSeams.every((seam) => rafterCenters.includes(seam))).toBe(true)
     const sheathingEdge = Math.max(
       ...roofSheathing.map((member) => Math.abs(member.position[2]) + member.size[2] / 2),
     )
@@ -117,21 +131,24 @@ describe('construction generator', () => {
   it('lays out staggered 4x8 subfloor panels with explicit joints', () => {
     const building = generateBuilding(referenceDesign)
     const panels = building.members.filter((member) => member.id.startsWith('subfloor-panel-'))
-    const longCourse = panels
-      .filter((member) => member.size[2] > 90)
-      .sort((a, b) => a.position[0] - b.position[0])
-    const shortCourse = panels
-      .filter((member) => member.size[2] < 30)
-      .sort((a, b) => a.position[0] - b.position[0])
+    const joistCenters = building.members
+      .filter((member) => member.id.startsWith('floor-joist-'))
+      .map((member) => member.position[2])
+    const rows = [...new Set(panels.map((member) => member.position[0]))].sort((a, b) => a - b)
+    const seams = rows.map((row) => {
+      const rowPanels = panels
+        .filter((member) => member.position[0] === row)
+        .sort((a, b) => a.position[2] - b.position[2])
+      const firstEnd = rowPanels[0].position[2] + rowPanels[0].size[2] / 2
+      const secondStart = rowPanels[1].position[2] - rowPanels[1].size[2] / 2
+      return (firstEnd + secondStart) / 2
+    })
 
-    expect(panels).toHaveLength(5)
+    expect(panels).toHaveLength(4)
     expect(panels.every((member) => member.size[0] <= 48 && member.size[2] <= 96)).toBe(true)
-    expect(longCourse).toHaveLength(2)
-    expect(shortCourse).toHaveLength(3)
-    expect(longCourse[1].position[0] - longCourse[1].size[0] / 2).toBeCloseTo(
-      longCourse[0].position[0] + longCourse[0].size[0] / 2 + 1 / 8,
-    )
-    expect(shortCourse.map((member) => member.position[0])).toEqual([-36 - 1 / 32, 0, 36 + 1 / 32])
+    expect(seams).toEqual([36, -12])
+    expect(seams.every((seam) => joistCenters.includes(seam))).toBe(true)
+    expect(Math.abs(seams[0] - seams[1])).toBeGreaterThanOrEqual(referenceDesign.floor.spacingIn)
   })
 
   it('lays out 4x8 wall sheets and clips only the panels crossed by openings', () => {
@@ -174,8 +191,56 @@ describe('construction generator', () => {
 
     expect(endWallPanels).toHaveLength(2)
     expect(sideWallPanels).toHaveLength(3)
-    expect(sideWallPanels.at(-1)?.size[2]).toBeCloseTo(24 + 7 / 8 - 1 / 16)
+    expect(sideWallPanels.at(-1)?.size[2]).toBeCloseTo(24 + 7 / 16 - 1 / 16)
     expect(sideWallPanels.every((member) => member.size[2] > 12)).toBe(true)
+  })
+
+  it('centers wall panel end joints over the common framing layout', () => {
+    const building = generateBuilding(referenceDesign)
+    const backPanels = building.members
+      .filter((member) => member.label.startsWith('back wall sheathing panel'))
+      .sort((a, b) => a.position[0] - b.position[0])
+    const backStudCenters = building.members
+      .filter((member) => member.label === 'back wall stud')
+      .map((member) => member.position[0])
+    const rightPanels = building.members
+      .filter((member) => member.label.startsWith('right wall sheathing panel'))
+      .sort((a, b) => a.position[2] - b.position[2])
+    const rightStudCenters = building.members
+      .filter((member) => member.label === 'right wall stud')
+      .map((member) => member.position[2])
+
+    const panelSeams = (panels: typeof backPanels, positionAxis: 0 | 2, sizeAxis: 0 | 2) =>
+      panels.slice(0, -1).map((panel, index) => {
+        const end = panel.position[positionAxis] + panel.size[sizeAxis] / 2
+        const start =
+          panels[index + 1].position[positionAxis] - panels[index + 1].size[sizeAxis] / 2
+        return (end + start) / 2
+      })
+
+    expect(panelSeams(backPanels, 0, 0)).toEqual([0])
+    expect(panelSeams(backPanels, 0, 0).every((seam) => backStudCenters.includes(seam))).toBe(true)
+    expect(panelSeams(rightPanels, 2, 2)).toEqual([-12, 36])
+    expect(panelSeams(rightPanels, 2, 2).every((seam) => rightStudCenters.includes(seam))).toBe(
+      true,
+    )
+  })
+
+  it('backs a panel seam where it meets the reference window opening', () => {
+    const building = generateBuilding(referenceDesign)
+    const lowerCripples = building.members.filter(
+      (member) => member.label === 'Window lower cripple',
+    )
+    const seamBacking = lowerCripples.find((member) => member.position[2] === -11.25)
+    const leftWindowJack = building.members.find(
+      (member) => member.label === 'window jack stud' && member.position[2] < 0,
+    )
+
+    expect(leftWindowJack?.position[2]).toBe(-12.75)
+    expect(seamBacking).toBeDefined()
+    expect((leftWindowJack?.position[2] ?? 0) + 0.75).toBeCloseTo(
+      (seamBacking?.position[2] ?? 0) - 0.75,
+    )
   })
 
   it('covers siding corners with eight cut-to-height trim boards', () => {
@@ -227,6 +292,23 @@ describe('construction generator', () => {
     expect(
       gableStuds.some((member) => member.fabrication?.cuts.some((cut) => cut.type === 'slope')),
     ).toBe(true)
+  })
+
+  it('adds framing behind horizontal wall and roof panel joints', () => {
+    const tall = cloneProject(referenceDesign)
+    tall.dimensions.wallHeightIn = 120
+    const building = generateBuilding(tall)
+    const wallBlocking = building.members.filter((member) =>
+      member.id.startsWith('wall-panel-blocking-'),
+    )
+    const roofBlocking = building.members.filter((member) =>
+      member.id.startsWith('roof-panel-blocking-'),
+    )
+
+    expect(wallBlocking.length).toBeGreaterThan(0)
+    expect(new Set(wallBlocking.map((member) => member.position[1])).size).toBe(1)
+    expect(roofBlocking.length).toBeGreaterThan(0)
+    expect(roofBlocking.every((member) => member.cutLengthIn && member.cutLengthIn > 0)).toBe(true)
   })
 
   it('selects a ridge board deep enough for steep rafter cut ends', () => {
