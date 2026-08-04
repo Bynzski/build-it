@@ -65,11 +65,11 @@ describe('construction generator', () => {
     const building = generateBuilding(referenceDesign)
     const frontPlate = building.members.find((member) => member.label === 'front bottom plate')
     const rightPlate = building.members.find((member) => member.label === 'right bottom plate')
-    const frontSheathing = building.members.filter(
-      (member) => member.label === 'front wall sheathing',
+    const frontSheathing = building.members.filter((member) =>
+      member.label.startsWith('front wall sheathing panel'),
     )
-    const rightSheathing = building.members.find(
-      (member) => member.label === 'right wall sheathing',
+    const rightSheathing = building.members.find((member) =>
+      member.label.startsWith('right wall sheathing panel'),
     )
 
     expect(frontPlate).toBeDefined()
@@ -93,7 +93,9 @@ describe('construction generator', () => {
     const gableRafters = building.members.filter((member) => member.label.includes('gable rafter'))
     const flyRafters = building.members.filter((member) => member.id.startsWith('fly-rafter-'))
     const lookouts = building.members.filter((member) => member.id.startsWith('rake-lookout-'))
-    const roofSheathing = building.members.find((member) => member.label === 'Left roof sheathing')
+    const roofSheathing = building.members.filter((member) =>
+      member.label.startsWith('Left roof sheathing panel'),
+    )
 
     expect(gableRafters).toHaveLength(4)
     expect(new Set(gableRafters.map((member) => Math.abs(member.position[2])))).toEqual(
@@ -101,10 +103,64 @@ describe('construction generator', () => {
     )
     expect(flyRafters).toHaveLength(4)
     expect(lookouts).toHaveLength(12)
-    expect(roofSheathing?.size[2]).toBe(144)
-    expect(Math.abs(flyRafters[0].position[2]) + flyRafters[0].size[2] / 2).toBeCloseTo(
-      (roofSheathing?.size[2] ?? 0) / 2,
+    expect(roofSheathing).toHaveLength(4)
+    expect(roofSheathing.every((member) => member.size[0] <= 48)).toBe(true)
+    expect(roofSheathing.every((member) => member.size[2] <= 96)).toBe(true)
+    const sheathingEdge = Math.max(
+      ...roofSheathing.map((member) => Math.abs(member.position[2]) + member.size[2] / 2),
     )
+    expect(Math.abs(flyRafters[0].position[2]) + flyRafters[0].size[2] / 2).toBeCloseTo(
+      sheathingEdge + 1 / 16,
+    )
+  })
+
+  it('lays out staggered 4x8 subfloor panels with explicit joints', () => {
+    const building = generateBuilding(referenceDesign)
+    const panels = building.members.filter((member) => member.id.startsWith('subfloor-panel-'))
+    const longCourse = panels
+      .filter((member) => member.size[2] > 90)
+      .sort((a, b) => a.position[0] - b.position[0])
+    const shortCourse = panels
+      .filter((member) => member.size[2] < 30)
+      .sort((a, b) => a.position[0] - b.position[0])
+
+    expect(panels).toHaveLength(5)
+    expect(panels.every((member) => member.size[0] <= 48 && member.size[2] <= 96)).toBe(true)
+    expect(longCourse).toHaveLength(2)
+    expect(shortCourse).toHaveLength(3)
+    expect(longCourse[1].position[0] - longCourse[1].size[0] / 2).toBeCloseTo(
+      longCourse[0].position[0] + longCourse[0].size[0] / 2 + 1 / 8,
+    )
+    expect(shortCourse.map((member) => member.position[0])).toEqual([-36, 0, 36])
+  })
+
+  it('lays out 4x8 wall sheets and clips only the panels crossed by openings', () => {
+    const building = generateBuilding(referenceDesign)
+    const back = building.members
+      .filter((member) => member.label.startsWith('back wall sheathing panel'))
+      .sort((a, b) => a.position[0] - b.position[0])
+    const front = building.members.filter((member) =>
+      member.label.startsWith('front wall sheathing panel'),
+    )
+
+    expect(back).toHaveLength(3)
+    expect(back.every((member) => member.size[0] <= 48 && member.size[1] <= 96)).toBe(true)
+    expect(back[1].position[0] - back[1].size[0] / 2).toBeCloseTo(
+      back[0].position[0] + back[0].size[0] / 2 + 1 / 8,
+    )
+    expect(new Set(front.map((member) => member.label)).size).toBe(3)
+    expect(front.length).toBeGreaterThan(3)
+  })
+
+  it('clips gable sheathing from a 4x8 panel grid', () => {
+    const building = generateBuilding(referenceDesign)
+    const panels = building.members.filter((member) =>
+      member.label.startsWith('front gable sheathing panel'),
+    )
+
+    expect(panels).toHaveLength(3)
+    expect(panels.every((member) => member.shape === 'profile')).toBe(true)
+    expect(panels.every((member) => member.size[0] <= 48 && member.size[1] <= 48)).toBe(true)
   })
 
   it('profiles common rafters with flush ridge, birdsmouth, and tail cuts', () => {

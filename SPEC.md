@@ -33,7 +33,7 @@ The reference design includes:
 - Rectangular 2×4 walls framed 16 inches on center by default.
 - A gable roof with adjustable pitch and overhang.
 - A framed door opening and optional rectangular windows.
-- Floor, wall, and roof sheathing plus basic siding and roofing layers.
+- Floor, wall, gable, and roof sheathing laid out as visible 4×8 panels, plus basic siding and roofing layers.
 - Optional insulation and interior finish layers.
 
 Member sizes and spacing are modeling inputs, not span approval. The reference design must exercise every shared system: editing, framing, openings, geometry, validation, saving, guidance, and estimation.
@@ -64,6 +64,7 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Initially support 2×4 and 2×6 walls with 16-inch and 24-inch framing spacing.
 - Model single bottom plates, double top plates, corners, and framed openings.
 - Model the reference gable roof as paired profiled rafters, a ridge board, rafter ties, supported rake overhangs, and slope-cut gable framing.
+- Lay out sheet goods in standard 4×8 panels with explicit joints, staggered floor and roof courses, and opening/slope cuts.
 - Derive visible member profiles and semantic cut intent from the same construction dimensions.
 - Apply practical rules for dimensions, framing layout, and supported openings.
 - Flag obvious construction conflicts without claiming engineering approval.

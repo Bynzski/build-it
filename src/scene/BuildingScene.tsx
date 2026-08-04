@@ -1,4 +1,4 @@
-import { Grid, OrbitControls } from '@react-three/drei'
+import { Edges, Grid, OrbitControls } from '@react-three/drei'
 import { Canvas, type ThreeEvent, useThree } from '@react-three/fiber'
 import { useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -28,6 +28,7 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
 
   const isTransparent = viewMode === 'both' && member.layer !== 'framing'
   const opacity = isTransparent ? (member.layer === 'finish' ? 0.2 : 0.12) : 0.92
+  const isSheetPanel = member.label.includes(' panel ')
   const gableShape = useMemo(() => {
     const shape = new THREE.Shape()
     shape.moveTo(-member.size[0] / 2, -member.size[1] / 2)
@@ -94,6 +95,7 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
         opacity={opacity}
         depthWrite={!isTransparent}
       />
+      {isSheetPanel ? <Edges threshold={15} color={isTransparent ? '#806f58' : '#5f4a32'} /> : null}
     </mesh>
   )
 }

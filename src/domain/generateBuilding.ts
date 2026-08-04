@@ -49,6 +49,106 @@ const WALL_SHEATHING_THICKNESS = 7 / 16
 const SIDING_THICKNESS = 5 / 8
 const ROOFING_THICKNESS = 1 / 8
 const PLATE_THICKNESS = 1.5
+const PANEL_SHORT_EDGE = 48
+const PANEL_LONG_EDGE = 96
+const PANEL_GAP = 1 / 8
+
+interface PanelSegment {
+  start: number
+  end: number
+}
+
+function panelSegments(
+  spanIn: number,
+  maximumLengthIn: number,
+  leadingLengthIn = 0,
+): PanelSegment[] {
+  const start = -spanIn / 2
+  const end = spanIn / 2
+  const segments: PanelSegment[] = []
+  let cursor = start
+
+  if (leadingLengthIn > 0) {
+    const leadingEnd = Math.min(cursor + leadingLengthIn, end)
+    if (leadingEnd - cursor > 0.01) segments.push({ start: cursor, end: leadingEnd })
+    cursor = leadingEnd
+  }
+
+  while (cursor < end - 0.01) {
+    const next = Math.min(cursor + maximumLengthIn, end)
+    segments.push({ start: cursor, end: next })
+    cursor = next
+  }
+  return segments
+}
+
+function insetPanelSegment(segment: PanelSegment): PanelSegment {
+  const inset = Math.min(PANEL_GAP / 2, (segment.end - segment.start) / 4)
+  return { start: segment.start + inset, end: segment.end - inset }
+}
+
+function positivePanelSegments(
+  spanIn: number,
+  maximumLengthIn: number,
+  leadingLengthIn = 0,
+): PanelSegment[] {
+  return panelSegments(spanIn, maximumLengthIn, leadingLengthIn).map((segment) => ({
+    start: segment.start + spanIn / 2,
+    end: segment.end + spanIn / 2,
+  }))
+}
+
+function clipPolygon(
+  points: ProfilePoint[],
+  inside: (point: ProfilePoint) => boolean,
+  intersection: (start: ProfilePoint, end: ProfilePoint) => ProfilePoint,
+): ProfilePoint[] {
+  if (points.length === 0) return []
+  const clipped: ProfilePoint[] = []
+
+  for (let index = 0; index < points.length; index += 1) {
+    const start = points[index]
+    const end = points[(index + 1) % points.length]
+    const startInside = inside(start)
+    const endInside = inside(end)
+
+    if (startInside && endInside) clipped.push(end)
+    else if (startInside) clipped.push(intersection(start, end))
+    else if (endInside) clipped.push(intersection(start, end), end)
+  }
+  return clipped
+}
+
+function clipPolygonToRectangle(
+  points: ProfilePoint[],
+  rectangle: Omit<PanelRectangle, 'panelIndex'>,
+): ProfilePoint[] {
+  const verticalIntersection = (x: number) => (start: ProfilePoint, end: ProfilePoint) => {
+    const ratio = (x - start[0]) / (end[0] - start[0])
+    return [x, start[1] + (end[1] - start[1]) * ratio] as ProfilePoint
+  }
+  const horizontalIntersection = (y: number) => (start: ProfilePoint, end: ProfilePoint) => {
+    const ratio = (y - start[1]) / (end[1] - start[1])
+    return [start[0] + (end[0] - start[0]) * ratio, y] as ProfilePoint
+  }
+
+  let clipped = clipPolygon(
+    points,
+    ([x]) => x >= rectangle.left,
+    verticalIntersection(rectangle.left),
+  )
+  clipped = clipPolygon(
+    clipped,
+    ([x]) => x <= rectangle.right,
+    verticalIntersection(rectangle.right),
+  )
+  clipped = clipPolygon(
+    clipped,
+    ([, y]) => y >= rectangle.bottom,
+    horizontalIntersection(rectangle.bottom),
+  )
+  return clipPolygon(clipped, ([, y]) => y <= rectangle.top, horizontalIntersection(rectangle.top))
+}
 
 function addMember(context: GeneratorContext, options: AddMemberOptions): void {
   context.sequence += 1
@@ -203,15 +303,29 @@ function addFloor(context: GeneratorContext): { wallBaseIn: number; floorAreaSqI
   }
 
   const subfloorY = skidDepth + joistDepth + SUBFLOOR_THICKNESS / 2
-  addMember(context, {
-    label: 'Subfloor deck',
-    assembly: 'floor',
-    layer: 'sheathing',
-    materialId: project.floor.sheathingMaterialId,
-    size: [widthIn, SUBFLOOR_THICKNESS, lengthIn],
-    position: [0, subfloorY, 0],
-    idHint: 'subfloor',
-  })
+  const subfloorCourses = panelSegments(lengthIn, PANEL_LONG_EDGE)
+  let subfloorPanel = 0
+  for (const [courseIndex, rawZ] of subfloorCourses.entries()) {
+    const xSegments = panelSegments(
+      widthIn,
+      PANEL_SHORT_EDGE,
+      courseIndex % 2 === 1 ? PANEL_SHORT_EDGE / 2 : 0,
+    )
+    for (const rawX of xSegments) {
+      subfloorPanel += 1
+      const x = insetPanelSegment(rawX)
+      const z = insetPanelSegment(rawZ)
+      addMember(context, {
+        label: `Subfloor panel ${subfloorPanel}`,
+        assembly: 'floor',
+        layer: 'sheathing',
+        materialId: project.floor.sheathingMaterialId,
+        size: [x.end - x.start, SUBFLOOR_THICKNESS, z.end - z.start],
+        position: [(x.start + x.end) / 2, subfloorY, (z.start + z.end) / 2],
+        idHint: 'subfloor-panel',
+      })
+    }
+  }
 
   const floorAreaSqIn = widthIn * lengthIn
   context.surfaces.push({
@@ -409,47 +523,79 @@ interface SurfaceCell {
   verticalCenter: number
   width: number
   height: number
+  panelIndex: number
+}
+
+interface PanelRectangle {
+  left: number
+  right: number
+  bottom: number
+  top: number
+  panelIndex: number
+}
+
+function subtractOpening(rectangle: PanelRectangle, opening: Opening): PanelRectangle[] {
+  const openingLeft = opening.centerOffsetIn - opening.widthIn / 2
+  const openingRight = opening.centerOffsetIn + opening.widthIn / 2
+  const openingBottom = opening.sillHeightIn
+  const openingTop = opening.sillHeightIn + opening.heightIn
+  const cutLeft = Math.max(rectangle.left, openingLeft)
+  const cutRight = Math.min(rectangle.right, openingRight)
+  const cutBottom = Math.max(rectangle.bottom, openingBottom)
+  const cutTop = Math.min(rectangle.top, openingTop)
+
+  if (cutLeft >= cutRight || cutBottom >= cutTop) return [rectangle]
+
+  const pieces: PanelRectangle[] = []
+  const addPiece = (left: number, right: number, bottom: number, top: number) => {
+    if (right - left > 0.05 && top - bottom > 0.05) {
+      pieces.push({ left, right, bottom, top, panelIndex: rectangle.panelIndex })
+    }
+  }
+  addPiece(rectangle.left, rectangle.right, rectangle.bottom, cutBottom)
+  addPiece(rectangle.left, rectangle.right, cutTop, rectangle.top)
+  addPiece(rectangle.left, cutLeft, cutBottom, cutTop)
+  addPiece(cutRight, rectangle.right, cutBottom, cutTop)
+  return pieces
 }
 
 function wallSurfaceCells(spanIn: number, heightIn: number, openings: Opening[]): SurfaceCell[] {
-  const alongBounds = new Set<number>([-spanIn / 2, spanIn / 2])
-  const verticalBounds = new Set<number>([0, heightIn])
-  for (const opening of openings) {
-    alongBounds.add(Math.max(-spanIn / 2, opening.centerOffsetIn - opening.widthIn / 2))
-    alongBounds.add(Math.min(spanIn / 2, opening.centerOffsetIn + opening.widthIn / 2))
-    verticalBounds.add(Math.max(0, opening.sillHeightIn))
-    verticalBounds.add(Math.min(heightIn, opening.sillHeightIn + opening.heightIn))
-  }
-  const along = [...alongBounds].sort((a, b) => a - b)
-  const vertical = [...verticalBounds].sort((a, b) => a - b)
-  const cells: SurfaceCell[] = []
+  const horizontalPanels = panelSegments(spanIn, PANEL_SHORT_EDGE)
+  const verticalPanels = panelSegments(heightIn, PANEL_LONG_EDGE).map((segment) => ({
+    start: segment.start + heightIn / 2,
+    end: segment.end + heightIn / 2,
+  }))
+  const rectangles: PanelRectangle[] = []
+  let panelIndex = 0
 
-  for (let xIndex = 0; xIndex < along.length - 1; xIndex += 1) {
-    for (let yIndex = 0; yIndex < vertical.length - 1; yIndex += 1) {
-      const start = along[xIndex]
-      const end = along[xIndex + 1]
-      const bottom = vertical[yIndex]
-      const top = vertical[yIndex + 1]
-      const centerAlong = (start + end) / 2
-      const centerVertical = (bottom + top) / 2
-      const insideOpening = openings.some(
-        (opening) =>
-          centerAlong > opening.centerOffsetIn - opening.widthIn / 2 &&
-          centerAlong < opening.centerOffsetIn + opening.widthIn / 2 &&
-          centerVertical > opening.sillHeightIn &&
-          centerVertical < opening.sillHeightIn + opening.heightIn,
-      )
-      if (!insideOpening && end - start > 0.25 && top - bottom > 0.25) {
-        cells.push({
-          alongCenter: centerAlong,
-          verticalCenter: centerVertical,
-          width: end - start,
-          height: top - bottom,
-        })
+  for (const rawVertical of verticalPanels) {
+    for (const rawHorizontal of horizontalPanels) {
+      panelIndex += 1
+      const horizontal = insetPanelSegment(rawHorizontal)
+      const vertical = insetPanelSegment(rawVertical)
+      let pieces: PanelRectangle[] = [
+        {
+          left: horizontal.start,
+          right: horizontal.end,
+          bottom: vertical.start,
+          top: vertical.end,
+          panelIndex,
+        },
+      ]
+      for (const opening of openings) {
+        pieces = pieces.flatMap((piece) => subtractOpening(piece, opening))
       }
+      rectangles.push(...pieces)
     }
   }
-  return cells
+
+  return rectangles.map((rectangle) => ({
+    alongCenter: (rectangle.left + rectangle.right) / 2,
+    verticalCenter: (rectangle.bottom + rectangle.top) / 2,
+    width: rectangle.right - rectangle.left,
+    height: rectangle.top - rectangle.bottom,
+    panelIndex: rectangle.panelIndex,
+  }))
 }
 
 function addWallSurfaceLayer(
@@ -467,7 +613,7 @@ function addWallSurfaceLayer(
   for (const cell of cells) {
     const fixedOffset = wall.outward * (studDepth / 2 + distanceFromFraming + thickness / 2)
     addMember(context, {
-      label,
+      label: `${label} panel ${cell.panelIndex}`,
       assembly: 'walls',
       layer,
       materialId,
@@ -614,6 +760,58 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
   return netArea
 }
 
+function addGableSurfaceLayer(
+  context: GeneratorContext,
+  options: {
+    spanIn: number
+    riseIn: number
+    baseY: number
+    fixedIn: number
+    thickness: number
+    materialId: MaterialId
+    layer: 'sheathing' | 'finish'
+    label: string
+    idHint: string
+  },
+): void {
+  const horizontalPanels = panelSegments(options.spanIn, PANEL_SHORT_EDGE)
+  const verticalPanels = positivePanelSegments(options.riseIn, PANEL_LONG_EDGE)
+  const triangle: ProfilePoint[] = [
+    [-options.spanIn / 2, 0],
+    [options.spanIn / 2, 0],
+    [0, options.riseIn],
+  ]
+  let panelIndex = 0
+
+  for (const rawVertical of verticalPanels) {
+    for (const rawHorizontal of horizontalPanels) {
+      panelIndex += 1
+      const horizontal = insetPanelSegment(rawHorizontal)
+      const vertical = insetPanelSegment(rawVertical)
+      const panel = clipPolygonToRectangle(triangle, {
+        left: horizontal.start,
+        right: horizontal.end,
+        bottom: vertical.start,
+        top: vertical.end,
+      })
+      if (panel.length < 3 || Math.abs(signedArea(panel)) < 0.01) continue
+
+      addMember(context, {
+        label: `${options.label} panel ${panelIndex}`,
+        assembly: 'walls',
+        layer: options.layer,
+        materialId: options.materialId,
+        ...profileGeometry(
+          panel.map(([x, y]) => [x, options.baseY + y]),
+          options.thickness,
+          options.fixedIn,
+        ),
+        idHint: options.idHint,
+      })
+    }
+  }
+}
+
 function addGableEndFraming(
   context: GeneratorContext,
   wallBaseIn: number,
@@ -678,34 +876,29 @@ function addGableEndFraming(
       })
     }
 
-    addMember(context, {
-      label: `${wall.id} gable sheathing`,
-      assembly: 'walls',
-      layer: 'sheathing',
+    addGableSurfaceLayer(context, {
+      spanIn: widthIn + WALL_SHEATHING_THICKNESS * 2,
+      riseIn,
+      baseY,
+      fixedIn: wall.fixedIn + wall.outward * (studDepth / 2 + WALL_SHEATHING_THICKNESS / 2),
+      thickness: WALL_SHEATHING_THICKNESS,
       materialId: project.walls.sheathingMaterialId,
-      size: [widthIn + WALL_SHEATHING_THICKNESS * 2, riseIn, WALL_SHEATHING_THICKNESS],
-      position: [
-        0,
-        baseY + riseIn / 2,
-        wall.fixedIn + wall.outward * (studDepth / 2 + WALL_SHEATHING_THICKNESS / 2),
-      ],
+      layer: 'sheathing',
+      label: `${wall.id} gable sheathing`,
       idHint: 'gable-sheathing',
-      shape: 'gable',
     })
-    addMember(context, {
-      label: `${wall.id} gable siding`,
-      assembly: 'walls',
-      layer: 'finish',
-      materialId: project.walls.sidingMaterialId,
-      size: [widthIn + (WALL_SHEATHING_THICKNESS + SIDING_THICKNESS) * 2, riseIn, SIDING_THICKNESS],
-      position: [
-        0,
-        baseY + riseIn / 2,
+    addGableSurfaceLayer(context, {
+      spanIn: widthIn + (WALL_SHEATHING_THICKNESS + SIDING_THICKNESS) * 2,
+      riseIn,
+      baseY,
+      fixedIn:
         wall.fixedIn +
-          wall.outward * (studDepth / 2 + WALL_SHEATHING_THICKNESS + SIDING_THICKNESS / 2),
-      ],
+        wall.outward * (studDepth / 2 + WALL_SHEATHING_THICKNESS + SIDING_THICKNESS / 2),
+      thickness: SIDING_THICKNESS,
+      materialId: project.walls.sidingMaterialId,
+      layer: 'finish',
+      label: `${wall.id} gable siding`,
       idHint: 'gable-siding',
-      shape: 'gable',
     })
   }
 
@@ -955,22 +1148,38 @@ function addRoof(
     const rotationZ = side === -1 ? angle : -angle
     const sheathingOffset = rafterDepth / 2 + WALL_SHEATHING_THICKNESS / 2
     const roofingOffset = rafterDepth / 2 + WALL_SHEATHING_THICKNESS + ROOFING_THICKNESS / 2
+    const slopeCourses = positivePanelSegments(roofSlopeLength, PANEL_SHORT_EDGE)
+    let sheathingPanel = 0
+    for (const [courseIndex, rawSlope] of slopeCourses.entries()) {
+      const lengthPanels = panelSegments(
+        roofLength,
+        PANEL_LONG_EDGE,
+        courseIndex % 2 === 1 ? PANEL_SHORT_EDGE : 0,
+      )
+      for (const rawLength of lengthPanels) {
+        sheathingPanel += 1
+        const slope = insetPanelSegment(rawSlope)
+        const length = insetPanelSegment(rawLength)
+        const slopeCenter = (slope.start + slope.end) / 2
+        const horizontalRun = slopeCenter * cosine
+        addMember(context, {
+          label: `${side === -1 ? 'Left' : 'Right'} roof sheathing panel ${sheathingPanel}`,
+          assembly: 'roof',
+          layer: 'sheathing',
+          materialId: project.roof.sheathingMaterialId,
+          size: [slope.end - slope.start, WALL_SHEATHING_THICKNESS, length.end - length.start],
+          position: [
+            side * horizontalRun + side * Math.sin(angle) * sheathingOffset,
+            centerPeakY - slopeCenter * Math.sin(angle) + Math.cos(angle) * sheathingOffset,
+            (length.start + length.end) / 2,
+          ],
+          rotation: [0, 0, rotationZ],
+          idHint: 'roof-sheathing-panel',
+        })
+      }
+    }
     addMember(context, {
-      label: `${side === -1 ? 'Left' : 'right'} roof sheathing`,
-      assembly: 'roof',
-      layer: 'sheathing',
-      materialId: project.roof.sheathingMaterialId,
-      size: [roofSlopeLength, WALL_SHEATHING_THICKNESS, roofLength],
-      position: [
-        (side * extendedRun) / 2 + side * Math.sin(angle) * sheathingOffset,
-        (centerTailY + centerPeakY) / 2 + Math.cos(angle) * sheathingOffset,
-        0,
-      ],
-      rotation: [0, 0, rotationZ],
-      idHint: 'roof-sheathing',
-    })
-    addMember(context, {
-      label: `${side === -1 ? 'Left' : 'right'} roofing`,
+      label: `${side === -1 ? 'Left' : 'Right'} roofing`,
       assembly: 'roof',
       layer: 'finish',
       materialId: project.roof.roofingMaterialId,
