@@ -15,6 +15,7 @@ interface WallDefinition {
   id: WallId
   orientation: 'x' | 'z'
   spanIn: number
+  surfaceSpanIn: number
   fixedIn: number
   outward: 1 | -1
 }
@@ -73,6 +74,16 @@ function memberPositions(spanIn: number, spacingIn: number): number[] {
   const lastPosition = positions.at(-1) ?? -spanIn / 2
   if (Math.abs(lastPosition - spanIn / 2) > 0.01) positions.push(spanIn / 2)
   return positions
+}
+
+function memberCenterPositions(spanIn: number, spacingIn: number, memberWidthIn = 1.5): number[] {
+  return memberPositions(Math.max(spanIn - memberWidthIn, 0), spacingIn)
+}
+
+function centeredMemberPositions(spanIn: number, spacingIn: number, memberWidthIn = 1.5): number[] {
+  const positions = new Set(memberCenterPositions(spanIn, spacingIn, memberWidthIn))
+  positions.add(0)
+  return [...positions].sort((a, b) => a - b)
 }
 
 function lumberDimensions(materialId: MaterialId): [number, number] {
@@ -444,7 +455,7 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
   const studLength = height - PLATE_THICKNESS * 3
   const studBase = wallBaseIn + PLATE_THICKNESS
 
-  for (const position of memberPositions(wall.spanIn, project.walls.spacingIn)) {
+  for (const position of memberCenterPositions(wall.spanIn, project.walls.spacingIn)) {
     if (positionInsideOpening(position, openings)) continue
     addVerticalWallMember(
       context,
@@ -503,13 +514,16 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
     (total, opening) => total + opening.widthIn * opening.heightIn,
     0,
   )
-  const netArea = Math.max(0, wall.spanIn * height - openingArea)
-  const cells = wallSurfaceCells(wall.spanIn, height, openings)
+  const netArea = Math.max(0, wall.surfaceSpanIn * height - openingArea)
+  const sheathingSpan = wall.surfaceSpanIn + WALL_SHEATHING_THICKNESS * 2
+  const sidingSpan = wall.surfaceSpanIn + (WALL_SHEATHING_THICKNESS + SIDING_THICKNESS) * 2
+  const sheathingCells = wallSurfaceCells(sheathingSpan, height, openings)
+  const sidingCells = wallSurfaceCells(sidingSpan, height, openings)
 
   addWallSurfaceLayer(
     context,
     wall,
-    cells,
+    sheathingCells,
     wallBaseIn,
     studDepth,
     project.walls.sheathingMaterialId,
@@ -521,7 +535,7 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
   addWallSurfaceLayer(
     context,
     wall,
-    cells,
+    sidingCells,
     wallBaseIn,
     studDepth,
     project.walls.sidingMaterialId,
@@ -537,14 +551,14 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
       label: `${wall.id} wall sheathing`,
       assembly: 'walls',
       materialId: project.walls.sheathingMaterialId,
-      areaSqIn: netArea,
+      areaSqIn: Math.max(0, sheathingSpan * height - openingArea),
     },
     {
       id: `${wall.id}-siding-area`,
       label: `${wall.id} wall siding`,
       assembly: 'walls',
       materialId: project.walls.sidingMaterialId,
-      areaSqIn: netArea,
+      areaSqIn: Math.max(0, sidingSpan * height - openingArea),
     },
   )
   if (project.walls.insulationMaterialId) {
@@ -575,19 +589,21 @@ function addGableEndFraming(context: GeneratorContext, wallBaseIn: number, riseI
   const [, studDepth] = lumberDimensions(studMaterial)
   const baseY = wallBaseIn + wallHeightIn
   const gableAreaSqIn = widthIn * riseIn
+  const framingPlane = lengthIn / 2 - studDepth / 2
 
   for (const wall of [
-    { id: 'front' as const, fixedIn: lengthIn / 2, outward: 1 as const },
-    { id: 'back' as const, fixedIn: -lengthIn / 2, outward: -1 as const },
+    { id: 'front' as const, fixedIn: framingPlane, outward: 1 as const },
+    { id: 'back' as const, fixedIn: -framingPlane, outward: -1 as const },
   ]) {
     const definition: WallDefinition = {
       id: wall.id,
       orientation: 'x',
       spanIn: widthIn,
+      surfaceSpanIn: widthIn,
       fixedIn: wall.fixedIn,
       outward: wall.outward,
     }
-    for (const x of memberPositions(widthIn, project.walls.spacingIn).slice(1, -1)) {
+    for (const x of centeredMemberPositions(widthIn, project.walls.spacingIn).slice(1, -1)) {
       const height = riseIn * (1 - Math.abs(x) / (widthIn / 2))
       addVerticalWallMember(
         context,
@@ -607,7 +623,7 @@ function addGableEndFraming(context: GeneratorContext, wallBaseIn: number, riseI
       assembly: 'walls',
       layer: 'sheathing',
       materialId: project.walls.sheathingMaterialId,
-      size: [widthIn, riseIn, WALL_SHEATHING_THICKNESS],
+      size: [widthIn + WALL_SHEATHING_THICKNESS * 2, riseIn, WALL_SHEATHING_THICKNESS],
       position: [
         0,
         baseY + riseIn / 2,
@@ -621,7 +637,7 @@ function addGableEndFraming(context: GeneratorContext, wallBaseIn: number, riseI
       assembly: 'walls',
       layer: 'finish',
       materialId: project.walls.sidingMaterialId,
-      size: [widthIn, riseIn, SIDING_THICKNESS],
+      size: [widthIn + (WALL_SHEATHING_THICKNESS + SIDING_THICKNESS) * 2, riseIn, SIDING_THICKNESS],
       position: [
         0,
         baseY + riseIn / 2,
@@ -692,11 +708,17 @@ function addRoof(
   const [rafterThickness, rafterDepth] = lumberDimensions(rafterMaterial)
 
   const gableAreaSqIn = addGableEndFraming(context, wallBaseIn, rise)
+  const structuralRafterPositions = memberCenterPositions(
+    lengthIn,
+    project.roof.spacingIn,
+    rafterThickness,
+  )
 
-  for (const z of memberPositions(roofLength, project.roof.spacingIn)) {
+  for (const z of structuralRafterPositions) {
+    const atGable = Math.abs(Math.abs(z) - (lengthIn - rafterThickness) / 2) < 0.01
     for (const side of [-1, 1] as const) {
       addMember(context, {
-        label: `${side === -1 ? 'Left' : 'right'} roof rafter`,
+        label: `${atGable ? (z > 0 ? 'Front gable' : 'Back gable') : side === -1 ? 'Left' : 'Right'} rafter`,
         assembly: 'roof',
         layer: 'framing',
         materialId: rafterMaterial,
@@ -706,6 +728,50 @@ function addRoof(
         cutLengthIn: rafterLength,
         idHint: 'rafter',
       })
+    }
+  }
+
+  if (overhang > 0) {
+    const flyRafterOffset = roofLength / 2 - rafterThickness / 2
+    const lookoutLength = overhang + rafterThickness
+    const lookoutNormalOffset = rafterDepth / 2 - PLATE_THICKNESS / 2
+    const lookoutRuns = [extendedRun * 0.2, extendedRun * 0.52, extendedRun * 0.84]
+
+    for (const end of [-1, 1] as const) {
+      for (const side of [-1, 1] as const) {
+        const rotationZ = side === -1 ? angle : -angle
+        addMember(context, {
+          label: `${end === 1 ? 'Front' : 'Back'} ${side === -1 ? 'left' : 'right'} fly rafter`,
+          assembly: 'roof',
+          layer: 'framing',
+          materialId: rafterMaterial,
+          size: [rafterLength, rafterDepth, rafterThickness],
+          position: [(side * extendedRun) / 2, (eaveY + peakY) / 2, end * flyRafterOffset],
+          rotation: [0, 0, rotationZ],
+          cutLengthIn: rafterLength,
+          idHint: 'fly-rafter',
+        })
+
+        for (const lookoutRun of lookoutRuns) {
+          const centerlineX = side * lookoutRun
+          const centerlineY = peakY - lookoutRun * pitch
+          addMember(context, {
+            label: `${end === 1 ? 'Front' : 'Back'} rake lookout`,
+            assembly: 'roof',
+            layer: 'framing',
+            materialId: '2x4',
+            size: [3.5, PLATE_THICKNESS, lookoutLength],
+            position: [
+              centerlineX + side * Math.sin(angle) * lookoutNormalOffset,
+              centerlineY + Math.cos(angle) * lookoutNormalOffset,
+              end * (lengthIn / 2 + overhang / 2 - rafterThickness / 2),
+            ],
+            rotation: [0, 0, rotationZ],
+            cutLengthIn: lookoutLength,
+            idHint: 'rake-lookout',
+          })
+        }
+      }
     }
   }
 
@@ -721,14 +787,21 @@ function addRoof(
   })
 
   for (const side of [-1, 1] as const) {
+    const rotationZ = side === -1 ? angle : -angle
+    const sheathingOffset = rafterDepth / 2 + WALL_SHEATHING_THICKNESS / 2
+    const roofingOffset = rafterDepth / 2 + WALL_SHEATHING_THICKNESS + ROOFING_THICKNESS / 2
     addMember(context, {
       label: `${side === -1 ? 'Left' : 'right'} roof sheathing`,
       assembly: 'roof',
       layer: 'sheathing',
       materialId: project.roof.sheathingMaterialId,
       size: [rafterLength, WALL_SHEATHING_THICKNESS, roofLength],
-      position: [(side * extendedRun) / 2, (eaveY + peakY) / 2 + rafterDepth / 2, 0],
-      rotation: [0, 0, side === -1 ? angle : -angle],
+      position: [
+        (side * extendedRun) / 2 + side * Math.sin(angle) * sheathingOffset,
+        (eaveY + peakY) / 2 + Math.cos(angle) * sheathingOffset,
+        0,
+      ],
+      rotation: [0, 0, rotationZ],
       idHint: 'roof-sheathing',
     })
     addMember(context, {
@@ -738,11 +811,11 @@ function addRoof(
       materialId: project.roof.roofingMaterialId,
       size: [rafterLength, ROOFING_THICKNESS, roofLength],
       position: [
-        (side * extendedRun) / 2,
-        (eaveY + peakY) / 2 + rafterDepth / 2 + WALL_SHEATHING_THICKNESS,
+        (side * extendedRun) / 2 + side * Math.sin(angle) * roofingOffset,
+        (eaveY + peakY) / 2 + Math.cos(angle) * roofingOffset,
         0,
       ],
-      rotation: [0, 0, side === -1 ? angle : -angle],
+      rotation: [0, 0, rotationZ],
       idHint: 'roofing',
     })
   }
@@ -777,11 +850,42 @@ export function generateBuilding(project: BuildItProject): GeneratedBuilding {
   }
   const { widthIn, lengthIn } = project.dimensions
   const { wallBaseIn, floorAreaSqIn } = addFloor(context)
+  const [, studDepth] = lumberDimensions(project.walls.studSize as MaterialId)
+  const frontBackPlane = lengthIn / 2 - studDepth / 2
+  const sidePlane = widthIn / 2 - studDepth / 2
   const walls: WallDefinition[] = [
-    { id: 'front', orientation: 'x', spanIn: widthIn, fixedIn: lengthIn / 2, outward: 1 },
-    { id: 'back', orientation: 'x', spanIn: widthIn, fixedIn: -lengthIn / 2, outward: -1 },
-    { id: 'left', orientation: 'z', spanIn: lengthIn, fixedIn: -widthIn / 2, outward: -1 },
-    { id: 'right', orientation: 'z', spanIn: lengthIn, fixedIn: widthIn / 2, outward: 1 },
+    {
+      id: 'front',
+      orientation: 'x',
+      spanIn: widthIn,
+      surfaceSpanIn: widthIn,
+      fixedIn: frontBackPlane,
+      outward: 1,
+    },
+    {
+      id: 'back',
+      orientation: 'x',
+      spanIn: widthIn,
+      surfaceSpanIn: widthIn,
+      fixedIn: -frontBackPlane,
+      outward: -1,
+    },
+    {
+      id: 'left',
+      orientation: 'z',
+      spanIn: lengthIn - studDepth * 2,
+      surfaceSpanIn: lengthIn,
+      fixedIn: -sidePlane,
+      outward: -1,
+    },
+    {
+      id: 'right',
+      orientation: 'z',
+      spanIn: lengthIn - studDepth * 2,
+      surfaceSpanIn: lengthIn,
+      fixedIn: sidePlane,
+      outward: 1,
+    },
   ]
   let wallAreaSqIn = walls.reduce((area, wall) => area + addWall(context, wall, wallBaseIn), 0)
   const { roofAreaSqIn, peakHeightIn, gableAreaSqIn } = addRoof(context, wallBaseIn)
