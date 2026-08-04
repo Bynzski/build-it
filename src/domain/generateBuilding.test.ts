@@ -177,4 +177,58 @@ describe('construction generator', () => {
     )
     expect(lookout?.fabrication?.cuts.map((cut) => cut.type)).toEqual(['square', 'square'])
   })
+
+  it('closes the floor perimeter with rim boards and butted joist ends', () => {
+    const building = generateBuilding(referenceDesign)
+    const leftRim = building.members.find((member) => member.label === 'Left floor rim board')
+    const rightRim = building.members.find((member) => member.label === 'Right floor rim board')
+    const frontJoist = building.members.find((member) => member.label === 'Front floor joist')
+    const backJoist = building.members.find((member) => member.label === 'Back floor joist')
+
+    expect(leftRim?.size[2]).toBe(120)
+    expect(rightRim?.size[2]).toBe(120)
+    expect(frontJoist?.size[0]).toBe(93)
+    expect((frontJoist?.position[0] ?? 0) - (frontJoist?.size[0] ?? 0) / 2).toBeCloseTo(
+      (leftRim?.position[0] ?? 0) + (leftRim?.size[0] ?? 0) / 2,
+    )
+    expect((frontJoist?.position[0] ?? 0) + (frontJoist?.size[0] ?? 0) / 2).toBeCloseTo(
+      (rightRim?.position[0] ?? 0) - (rightRim?.size[0] ?? 0) / 2,
+    )
+    expect((frontJoist?.position[2] ?? 0) + (frontJoist?.size[2] ?? 0) / 2).toBe(60)
+    expect((backJoist?.position[2] ?? 0) - (backJoist?.size[2] ?? 0) / 2).toBe(-60)
+  })
+
+  it('butts opening headers between king studs and window sills between jack studs', () => {
+    const building = generateBuilding(referenceDesign)
+    const doorHeaders = building.members.filter((member) => member.label === 'door header')
+    const doorKings = building.members
+      .filter((member) => member.label === 'door king stud')
+      .sort((a, b) => a.position[0] - b.position[0])
+    const windowSill = building.members.find((member) => member.label === 'Window sill')
+    const windowJacks = building.members
+      .filter((member) => member.label === 'window jack stud')
+      .sort((a, b) => a.position[2] - b.position[2])
+
+    expect(doorHeaders).toHaveLength(2)
+    expect(doorHeaders[0].size[0]).toBe(39)
+    expect(doorHeaders[0].position[0] - doorHeaders[0].size[0] / 2).toBeCloseTo(
+      doorKings[0].position[0] + doorKings[0].size[0] / 2,
+    )
+    expect(doorHeaders[0].position[0] + doorHeaders[0].size[0] / 2).toBeCloseTo(
+      doorKings[1].position[0] - doorKings[1].size[0] / 2,
+    )
+    expect(
+      Math.min(...doorHeaders.map((member) => member.position[2] - member.size[2] / 2)),
+    ).toBeCloseTo(doorKings[0].position[2] - doorKings[0].size[2] / 2)
+    expect(
+      Math.max(...doorHeaders.map((member) => member.position[2] + member.size[2] / 2)),
+    ).toBeCloseTo(doorKings[0].position[2] + doorKings[0].size[2] / 2)
+    expect(windowSill?.size[2]).toBe(24)
+    expect((windowSill?.position[2] ?? 0) - (windowSill?.size[2] ?? 0) / 2).toBeCloseTo(
+      windowJacks[0].position[2] + windowJacks[0].size[2] / 2,
+    )
+    expect((windowSill?.position[2] ?? 0) + (windowSill?.size[2] ?? 0) / 2).toBeCloseTo(
+      windowJacks[1].position[2] - windowJacks[1].size[2] / 2,
+    )
+  })
 })

@@ -173,30 +173,25 @@ function addFloor(context: GeneratorContext): { wallBaseIn: number; floorAreaSqI
   const [joistWidth, joistDepth] = lumberDimensions(joistMaterial)
   const joistCenterY = skidDepth + joistDepth / 2
 
-  addMember(context, {
-    label: 'Front rim board',
-    assembly: 'floor',
-    layer: 'framing',
-    materialId: joistMaterial,
-    size: [widthIn, joistDepth, joistWidth],
-    position: [0, joistCenterY, lengthIn / 2 - joistWidth / 2],
-    cutLengthIn: widthIn,
-    idHint: 'floor-rim',
-  })
-  addMember(context, {
-    label: 'Back rim board',
-    assembly: 'floor',
-    layer: 'framing',
-    materialId: joistMaterial,
-    size: [widthIn, joistDepth, joistWidth],
-    position: [0, joistCenterY, -lengthIn / 2 + joistWidth / 2],
-    cutLengthIn: widthIn,
-    idHint: 'floor-rim',
-  })
-
-  for (const z of memberPositions(lengthIn - joistWidth * 2, project.floor.spacingIn)) {
+  for (const side of [-1, 1] as const) {
     addMember(context, {
-      label: 'Floor joist',
+      label: `${side === -1 ? 'Left' : 'Right'} floor rim board`,
+      assembly: 'floor',
+      layer: 'framing',
+      materialId: joistMaterial,
+      size: [joistWidth, joistDepth, lengthIn],
+      position: [side * (widthIn / 2 - joistWidth / 2), joistCenterY, 0],
+      cutLengthIn: lengthIn,
+      idHint: 'floor-rim',
+    })
+  }
+
+  const floorJoistPositions = memberCenterPositions(lengthIn, project.floor.spacingIn, joistWidth)
+  for (const [index, z] of floorJoistPositions.entries()) {
+    const atBack = index === 0
+    const atFront = index === floorJoistPositions.length - 1
+    addMember(context, {
+      label: atBack ? 'Back floor joist' : atFront ? 'Front floor joist' : 'Floor joist',
       assembly: 'floor',
       layer: 'framing',
       materialId: joistMaterial,
@@ -315,7 +310,8 @@ function addOpeningFraming(
   const headerMaterial: MaterialId = studMaterial === '2x6' ? '2x8' : '2x6'
   const [, headerDepth] = lumberDimensions(headerMaterial)
   const headerBottom = wallBaseIn + opening.sillHeightIn + opening.heightIn
-  const headerLength = opening.widthIn + 6
+  const headerLength = opening.widthIn + 3
+  const headerPlyOffset = (studDepth - PLATE_THICKNESS) / 2
 
   for (const side of [-1, 1] as const) {
     const edge = side === -1 ? left : right
@@ -344,7 +340,7 @@ function addOpeningFraming(
     )
   }
 
-  for (const offset of [-0.8, 0.8]) {
+  for (const offset of [-headerPlyOffset, headerPlyOffset]) {
     addHorizontalWallMember(
       context,
       wall,
@@ -368,7 +364,7 @@ function addOpeningFraming(
       studDepth,
       opening.centerOffsetIn,
       wallBaseIn + opening.sillHeightIn - PLATE_THICKNESS / 2,
-      opening.widthIn + 3,
+      opening.widthIn,
       PLATE_THICKNESS,
       'Window sill',
       'window-sill',
