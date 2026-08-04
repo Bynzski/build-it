@@ -244,8 +244,8 @@ export default function App() {
           </div>
 
           <div className="viewport-help">
-            <span>Drag colored handles to resize</span>
-            <span>Shift for ¼″ increments</span>
+            <span>Click + drag colored handles</span>
+            <span>Shift for fine ¼″ control · Esc cancels</span>
             <span>Orbit · right-drag pan · scroll zoom</span>
           </div>
 

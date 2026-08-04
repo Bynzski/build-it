@@ -358,6 +358,36 @@ select:focus-visible {
   backdrop-filter: blur(8px);
 }
 
+.dimension-tooltip {
+  display: grid;
+  gap: 2px;
+  min-width: 118px;
+  padding: 7px 10px;
+  border: 1px solid rgba(48, 76, 77, 0.15);
+  border-radius: 8px;
+  color: #344b4f;
+  background: rgba(252, 253, 251, 0.94);
+  box-shadow: 0 5px 16px rgba(28, 50, 53, 0.14);
+  text-align: center;
+  white-space: nowrap;
+  transform: translateY(-4px);
+  backdrop-filter: blur(8px);
+}
+
+.dimension-tooltip strong {
+  font-size: 11px;
+}
+
+.dimension-tooltip span {
+  color: #718184;
+  font-size: 8px;
+}
+
+.dimension-tooltip.is-dragging {
+  border-color: rgba(47, 102, 93, 0.38);
+  box-shadow: 0 7px 20px rgba(28, 50, 53, 0.18);
+}
+
 .viewport-help {
   position: absolute;
   z-index: 10;
