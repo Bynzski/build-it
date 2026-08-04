@@ -22,6 +22,7 @@ describe('construction generator', () => {
 
     expect(lumber.length).toBeGreaterThan(3)
     expect(coverage.some((item) => item.materialId === 'osb-7-16')).toBe(true)
+    expect(coverage.some((item) => item.materialId === 'housewrap-wrb')).toBe(true)
     expect(coverage.some((item) => item.materialId === 'metal-roofing')).toBe(true)
     expect(building.breakdown.some((item) => item.assembly === 'walls')).toBe(true)
   })
@@ -292,7 +293,7 @@ describe('construction generator', () => {
     expect(upperCourseBottom - lowerCourseTop).toBeCloseTo(1 / 8)
   })
 
-  it('uses standard precut studs and flashes the horizontal siding joint', () => {
+  it('uses standard precut studs and flashes weather-exposed cladding joints', () => {
     const building = generateBuilding(referenceDesign)
     const wallStuds = building.members.filter((member) => member.id.startsWith('wall-stud-'))
     const flashing = building.members.filter((member) => member.id.startsWith('z-flashing-'))
@@ -313,11 +314,86 @@ describe('construction generator', () => {
 
     expect(wallStuds.every((member) => member.cutLengthIn === 92 + 5 / 8)).toBe(true)
     expect(flashing.length).toBeGreaterThanOrEqual(4)
-    expect(flashing.every((member) => member.layer === 'finish')).toBe(true)
+    expect(flashing.every((member) => member.layer === 'weather')).toBe(true)
     expect(upperSidingBottom - lowerSidingTop).toBeCloseTo(3 / 8)
     expect(flashingPurchase).toEqual(
       expect.objectContaining({ purchaseLengthIn: 120, unit: '10-foot piece' }),
     )
+  })
+
+  it('continues the WRB over wall and gable surfaces', () => {
+    const building = generateBuilding(referenceDesign)
+    const wallWrb = building.members.filter((member) => member.id.startsWith('wall-wrb-'))
+    const gableWrb = building.members.filter((member) => member.id.startsWith('gable-wrb-'))
+    const purchase = building.shoppingList.find((item) => item.materialId === 'housewrap-wrb')
+
+    expect(wallWrb.length).toBeGreaterThanOrEqual(4)
+    expect(gableWrb).toHaveLength(2)
+    expect([...wallWrb, ...gableWrb].every((member) => member.layer === 'weather')).toBe(true)
+    expect(purchase).toEqual(expect.objectContaining({ count: 1, unit: '9×100-foot roll' }))
+  })
+
+  it('flashes the wall-to-gable joint and leaves clearance above it', () => {
+    const building = generateBuilding(referenceDesign)
+    const flashing = building.members.filter((member) => member.id.startsWith('gable-z-flashing-'))
+    const frontGableSiding = building.members.filter((member) =>
+      member.label.startsWith('front gable siding panel'),
+    )
+    const frontWallSiding = building.members.filter((member) =>
+      member.label.startsWith('front wall siding panel'),
+    )
+    const seamY = flashing.find((member) => member.position[2] > 0)?.position[1] ?? 0
+    const gableBottom = Math.min(
+      ...frontGableSiding.flatMap((member) =>
+        (member.profile ?? []).map(([, y]) => y + member.position[1]),
+      ),
+    )
+    const wallTop = Math.max(
+      ...frontWallSiding.map((member) => member.position[1] + member.size[1] / 2),
+    )
+
+    expect(flashing).toHaveLength(2)
+    expect(flashing.every((member) => member.cutLengthIn === 96)).toBe(true)
+    expect(wallTop).toBeCloseTo(seamY)
+    expect(gableBottom - seamY).toBeCloseTo(3 / 8)
+  })
+
+  it('flashes additional horizontal cladding courses in a tall gable', () => {
+    const tallGable = cloneProject(referenceDesign)
+    tallGable.dimensions.widthIn = 240
+    tallGable.roof.pitchRise = 12
+    const building = generateBuilding(tallGable)
+    const flashing = building.members.filter((member) => member.id.startsWith('gable-z-flashing-'))
+
+    expect(flashing).toHaveLength(4)
+    expect(flashing.filter((member) => member.cutLengthIn === 240)).toHaveLength(2)
+    const upperCourseFlashing = flashing.filter((member) => (member.cutLengthIn ?? 240) < 240)
+    expect(upperCourseFlashing).toHaveLength(2)
+    expect(
+      upperCourseFlashing.every((member) => Math.abs((member.cutLengthIn ?? 0) - 48) < 0.01),
+    ).toBe(true)
+  })
+
+  it('adds extended head flashing and cladding clearance above every opening', () => {
+    const building = generateBuilding(referenceDesign)
+    const flashing = building.members.filter((member) =>
+      member.id.startsWith('opening-head-flashing-'),
+    )
+    const frontSiding = building.members.filter((member) =>
+      member.label.startsWith('front wall siding panel'),
+    )
+    const doorHeadY = flashing.find((member) => member.label.startsWith('door'))?.position[1] ?? 0
+    const sidingBottom = Math.min(
+      ...frontSiding
+        .map((member) => member.position[1] - member.size[1] / 2)
+        .filter((bottom) => bottom > doorHeadY),
+    )
+
+    expect(flashing).toHaveLength(referenceDesign.openings.length)
+    expect(
+      flashing.map((member) => member.cutLengthIn).sort((a, b) => (a ?? 0) - (b ?? 0)),
+    ).toEqual([31, 43])
+    expect(sidingBottom - doorHeadY).toBeCloseTo(3 / 8)
   })
 
   it('covers siding corners with eight cut-to-height trim boards', () => {

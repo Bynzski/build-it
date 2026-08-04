@@ -22,6 +22,7 @@
     "studSize": "2x4",
     "spacingIn": 16,
     "sheathingMaterialId": "osb-7-16",
+    "weatherBarrierMaterialId": "housewrap-wrb",
     "sidingMaterialId": "t1-11-5-8",
     "insulationMaterialId": null,
     "interiorMaterialId": null

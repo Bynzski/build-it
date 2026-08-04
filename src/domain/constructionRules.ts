@@ -6,12 +6,11 @@ export const constructionRules = {
     shortEdgeIn: 48,
     longEdgeIn: 96,
     jointGapIn: 1 / 8,
-    sidingHorizontalGapIn: 3 / 8,
   },
   layers: {
     subfloorThicknessIn: 23 / 32,
     wallSheathingThicknessIn: 7 / 16,
-    sidingThicknessIn: 5 / 8,
+    weatherBarrierThicknessIn: 1 / 32,
     roofingThicknessIn: 1 / 8,
   },
   wallCorners: {
@@ -30,6 +29,7 @@ export const constructionRules = {
   flashing: {
     projectionIn: 3 / 4,
     visibleHeightIn: 1 / 8,
+    openingEndExtensionIn: 3.5,
   },
   site: {
     minimumUntreatedWoodClearanceIn: 6,

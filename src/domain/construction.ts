@@ -1,7 +1,7 @@
 import type { MaterialId } from './materials'
 
 export type AssemblyId = 'foundation' | 'floor' | 'walls' | 'roof'
-export type MemberLayer = 'framing' | 'sheathing' | 'finish'
+export type MemberLayer = 'framing' | 'sheathing' | 'weather' | 'finish'
 export type Vector3Tuple = [number, number, number]
 export type ProfilePoint = [number, number]
 

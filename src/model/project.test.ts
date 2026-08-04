@@ -17,6 +17,13 @@ describe('BuildIt project schema', () => {
     expect(parseProject(JSON.parse(serialized))).toEqual(referenceDesign)
   })
 
+  it('adds the default WRB when opening an older schema-version-1 project', () => {
+    const legacy = JSON.parse(JSON.stringify(referenceDesign))
+    delete legacy.walls.weatherBarrierMaterialId
+
+    expect(parseProject(legacy).walls.weatherBarrierMaterialId).toBe('housewrap-wrb')
+  })
+
   it('clones without sharing nested state', () => {
     const clone = cloneProject(referenceDesign)
     clone.dimensions.widthIn = 144

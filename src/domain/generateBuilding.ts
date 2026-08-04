@@ -13,7 +13,7 @@ import { constructionRules, wallPanelLayoutSpan } from './constructionRules'
 import { estimateMaterials } from './estimate'
 import { edgeDatumMemberCenters, supportAwarePanelSegments } from './framingLayout'
 import { getGuidance } from './guidance'
-import { getMaterial, type MaterialId } from './materials'
+import { getMaterial, getPanelCladdingInstallation, type MaterialId } from './materials'
 
 interface WallDefinition {
   id: WallId
@@ -48,13 +48,12 @@ interface AddMemberOptions {
 
 const SUBFLOOR_THICKNESS = constructionRules.layers.subfloorThicknessIn
 const WALL_SHEATHING_THICKNESS = constructionRules.layers.wallSheathingThicknessIn
-const SIDING_THICKNESS = constructionRules.layers.sidingThicknessIn
+const WEATHER_BARRIER_THICKNESS = constructionRules.layers.weatherBarrierThicknessIn
 const ROOFING_THICKNESS = constructionRules.layers.roofingThicknessIn
 const PLATE_THICKNESS = constructionRules.plateThicknessIn
 const PANEL_SHORT_EDGE = constructionRules.panels.shortEdgeIn
 const PANEL_LONG_EDGE = constructionRules.panels.longEdgeIn
 const PANEL_GAP = constructionRules.panels.jointGapIn
-const SIDING_HORIZONTAL_GAP = constructionRules.panels.sidingHorizontalGapIn
 
 interface PanelSegment {
   start: number
@@ -85,10 +84,14 @@ function panelSegments(
   return segments
 }
 
-function insetPanelJoints(segments: PanelSegment[], gapIn = PANEL_GAP): PanelSegment[] {
+function insetPanelJoints(
+  segments: PanelSegment[],
+  gapIn = PANEL_GAP,
+  placement: 'centered' | 'clearance-above' = 'centered',
+): PanelSegment[] {
   return segments.map((segment, index) => ({
-    start: segment.start + (index > 0 ? gapIn / 2 : 0),
-    end: segment.end - (index < segments.length - 1 ? gapIn / 2 : 0),
+    start: segment.start + (index > 0 ? (placement === 'clearance-above' ? gapIn : gapIn / 2) : 0),
+    end: segment.end - (index < segments.length - 1 && placement === 'centered' ? gapIn / 2 : 0),
   }))
 }
 
@@ -602,14 +605,15 @@ function addWallPanelJointBlocking(
 function wallEnvelopeVerticalSegments(
   wallHeightIn: number,
   floorEdgeDepthIn: number,
+  maximumPanelHeightIn: number = PANEL_LONG_EDGE,
 ): PanelSegment[] {
   const bottom = -floorEdgeDepthIn
   const segments: PanelSegment[] = []
   let cursor = wallHeightIn
 
-  while (cursor - bottom > PANEL_LONG_EDGE + 0.01) {
-    segments.unshift({ start: cursor - PANEL_LONG_EDGE, end: cursor })
-    cursor -= PANEL_LONG_EDGE
+  while (cursor - bottom > maximumPanelHeightIn + 0.01) {
+    segments.unshift({ start: cursor - maximumPanelHeightIn, end: cursor })
+    cursor -= maximumPanelHeightIn
   }
   if (cursor - bottom > 0.01) segments.unshift({ start: bottom, end: cursor })
   return segments
@@ -673,14 +677,22 @@ function wallSurfaceCells(
   supportCentersIn: number[],
   edgeExtensionIn = 0,
   verticalJointGapIn = PANEL_GAP,
+  panelWidthIn: number = PANEL_SHORT_EDGE,
+  verticalJointPlacement: 'centered' | 'clearance-above' = 'centered',
+  panelJointGapIn = PANEL_GAP,
 ): SurfaceCell[] {
   const horizontalPanels = insetPanelJoints(
     extendOutsidePanelEdges(
-      supportAwarePanelSegments(layoutSpanIn, PANEL_SHORT_EDGE, supportCentersIn, PANEL_SHORT_EDGE),
+      supportAwarePanelSegments(layoutSpanIn, panelWidthIn, supportCentersIn, panelWidthIn),
       edgeExtensionIn,
     ),
+    panelJointGapIn,
   )
-  const verticalPanels = insetPanelJoints(rawVerticalPanels, verticalJointGapIn)
+  const verticalPanels = insetPanelJoints(
+    rawVerticalPanels,
+    verticalJointGapIn,
+    verticalJointPlacement,
+  )
   const rectangles: PanelRectangle[] = []
   let panelIndex = 0
 
@@ -712,6 +724,33 @@ function wallSurfaceCells(
   }))
 }
 
+function continuousWallSurfaceCells(
+  spanIn: number,
+  bottomIn: number,
+  topIn: number,
+  openings: Opening[],
+): SurfaceCell[] {
+  let rectangles: PanelRectangle[] = [
+    {
+      left: -spanIn / 2,
+      right: spanIn / 2,
+      bottom: bottomIn,
+      top: topIn,
+      panelIndex: 1,
+    },
+  ]
+  for (const opening of openings) {
+    rectangles = rectangles.flatMap((rectangle) => subtractOpening(rectangle, opening))
+  }
+  return rectangles.map((rectangle, index) => ({
+    alongCenter: (rectangle.left + rectangle.right) / 2,
+    verticalCenter: (rectangle.bottom + rectangle.top) / 2,
+    width: rectangle.right - rectangle.left,
+    height: rectangle.top - rectangle.bottom,
+    panelIndex: index + 1,
+  }))
+}
+
 function addWallJointFlashing(
   context: GeneratorContext,
   wall: WallDefinition,
@@ -719,12 +758,19 @@ function addWallJointFlashing(
   studDepth: number,
   verticalPanels: PanelSegment[],
   openings: Opening[],
+  claddingThicknessIn: number,
+  weatherBarrierThicknessIn: number,
 ): void {
   const flashingMaterial: MaterialId = 'z-flashing'
   const projection = constructionRules.flashing.projectionIn
   const visibleHeight = constructionRules.flashing.visibleHeightIn
   const fixedOffset =
-    wall.outward * (studDepth / 2 + WALL_SHEATHING_THICKNESS + SIDING_THICKNESS + projection / 2)
+    wall.outward *
+    (studDepth / 2 +
+      WALL_SHEATHING_THICKNESS +
+      weatherBarrierThicknessIn +
+      claddingThicknessIn +
+      projection / 2)
 
   for (const joint of verticalPanels.slice(0, -1).map((panel) => panel.end)) {
     const openingRanges = openings
@@ -746,7 +792,7 @@ function addWallJointFlashing(
       addMember(context, {
         label: `${wall.id} wall horizontal Z-flashing`,
         assembly: 'walls',
-        layer: 'finish',
+        layer: 'weather',
         materialId: flashingMaterial,
         size: wallMemberSize(wall, segment.end - segment.start, visibleHeight, projection),
         position: wallVector(
@@ -762,6 +808,72 @@ function addWallJointFlashing(
   }
 }
 
+function addOpeningHeadFlashing(
+  context: GeneratorContext,
+  wall: WallDefinition,
+  wallBaseIn: number,
+  studDepth: number,
+  openings: Opening[],
+  claddingThicknessIn: number,
+  weatherBarrierThicknessIn: number,
+): void {
+  const projection = constructionRules.flashing.projectionIn
+  const visibleHeight = constructionRules.flashing.visibleHeightIn
+  const endExtension = constructionRules.flashing.openingEndExtensionIn
+  const fixedOffset =
+    wall.outward *
+    (studDepth / 2 +
+      WALL_SHEATHING_THICKNESS +
+      weatherBarrierThicknessIn +
+      claddingThicknessIn +
+      projection / 2)
+
+  for (const opening of openings) {
+    const start = Math.max(
+      -wall.surfaceSpanIn / 2,
+      opening.centerOffsetIn - opening.widthIn / 2 - endExtension,
+    )
+    const end = Math.min(
+      wall.surfaceSpanIn / 2,
+      opening.centerOffsetIn + opening.widthIn / 2 + endExtension,
+    )
+    if (end - start <= 0.5) continue
+    addMember(context, {
+      label: `${opening.type} head Z-flashing`,
+      assembly: 'walls',
+      layer: 'weather',
+      materialId: 'z-flashing',
+      size: wallMemberSize(wall, end - start, visibleHeight, projection),
+      position: wallVector(
+        wall,
+        (start + end) / 2,
+        wallBaseIn + opening.sillHeightIn + opening.heightIn,
+        fixedOffset,
+      ),
+      cutLengthIn: end - start,
+      idHint: 'opening-head-flashing',
+    })
+  }
+}
+
+function claddingOpenings(
+  openings: Opening[],
+  edgeClearanceIn: number,
+  headClearanceIn: number,
+): Opening[] {
+  return openings.map((opening) => {
+    const bottom =
+      opening.type === 'door' ? opening.sillHeightIn : opening.sillHeightIn - edgeClearanceIn
+    const top = opening.sillHeightIn + opening.heightIn + headClearanceIn
+    return {
+      ...opening,
+      widthIn: opening.widthIn + edgeClearanceIn * 2,
+      sillHeightIn: Math.max(0, bottom),
+      heightIn: top - Math.max(0, bottom),
+    }
+  })
+}
+
 function addWallSurfaceLayer(
   context: GeneratorContext,
   wall: WallDefinition,
@@ -770,20 +882,20 @@ function addWallSurfaceLayer(
   studDepth: number,
   materialId: MaterialId,
   thickness: number,
-  layer: 'sheathing' | 'finish',
+  layer: 'sheathing' | 'weather' | 'finish',
   distanceFromFraming: number,
   label: string,
 ): void {
   for (const cell of cells) {
     const fixedOffset = wall.outward * (studDepth / 2 + distanceFromFraming + thickness / 2)
     addMember(context, {
-      label: `${label} panel ${cell.panelIndex}`,
+      label: `${label} ${layer === 'weather' ? 'section' : 'panel'} ${cell.panelIndex}`,
       assembly: 'walls',
       layer,
       materialId,
       size: wallMemberSize(wall, cell.width, cell.height, thickness),
       position: wallVector(wall, cell.alongCenter, wallBaseIn + cell.verticalCenter, fixedOffset),
-      idHint: layer === 'finish' ? 'siding' : 'wall-sheathing',
+      idHint: layer === 'finish' ? 'siding' : layer === 'weather' ? 'wall-wrb' : 'wall-sheathing',
     })
   }
 }
@@ -798,6 +910,8 @@ function addWall(
   const height = project.dimensions.wallHeightIn
   const studMaterial = project.walls.studSize as MaterialId
   const [, studDepth] = lumberDimensions(studMaterial)
+  const cladding = getPanelCladdingInstallation(project.walls.sidingMaterialId)
+  const weatherBarrierThickness = cladding.requiresWeatherBarrier ? WEATHER_BARRIER_THICKNESS : 0
   const openings = openingOnWall(project, wall.id)
   const studLength = height - PLATE_THICKNESS * 3
   const studBase = wallBaseIn + PLATE_THICKNESS
@@ -806,7 +920,12 @@ function addWall(
     constructionRules.site.minimumUntreatedWoodClearanceIn,
   )
   const floorEdgeDepth = wallBaseIn - envelopeBottomIn
-  const verticalPanels = wallEnvelopeVerticalSegments(height, floorEdgeDepth)
+  const sheathingVerticalPanels = wallEnvelopeVerticalSegments(height, floorEdgeDepth)
+  const claddingVerticalPanels = wallEnvelopeVerticalSegments(
+    height,
+    floorEdgeDepth,
+    cladding.panelHeightIn,
+  )
   const layoutPositions = edgeDatumMemberCenters(
     wall.surfaceSpanIn,
     wall.spanIn,
@@ -872,7 +991,7 @@ function addWall(
     context,
     wall,
     wallBaseIn,
-    verticalPanels,
+    sheathingVerticalPanels,
     studMaterial,
     studDepth,
     layoutPositions,
@@ -888,20 +1007,48 @@ function addWall(
   const sidingSpan = wallPanelLayoutSpan(wall.id, wall.surfaceSpanIn, 'siding')
   const sheathingCells = wallSurfaceCells(
     wall.surfaceSpanIn,
-    verticalPanels,
+    sheathingVerticalPanels,
     openings,
     layoutPositions,
     (sheathingSpan - wall.surfaceSpanIn) / 2,
   )
+  const sidingOpenings = claddingOpenings(
+    openings,
+    cladding.openingClearanceIn,
+    cladding.horizontalJoint.clearanceAboveIn,
+  )
   const sidingCells = wallSurfaceCells(
     wall.surfaceSpanIn,
-    verticalPanels,
-    openings,
+    claddingVerticalPanels,
+    sidingOpenings,
     layoutPositions,
     (sidingSpan - wall.surfaceSpanIn) / 2,
-    SIDING_HORIZONTAL_GAP,
+    cladding.horizontalJoint.clearanceAboveIn,
+    cladding.panelWidthIn,
+    'clearance-above',
+    cladding.verticalJointGapIn,
+  )
+  const weatherBarrierCells = continuousWallSurfaceCells(
+    wall.surfaceSpanIn,
+    -floorEdgeDepth,
+    height,
+    openings,
   )
 
+  if (cladding.requiresWeatherBarrier) {
+    addWallSurfaceLayer(
+      context,
+      wall,
+      weatherBarrierCells,
+      wallBaseIn,
+      studDepth,
+      project.walls.weatherBarrierMaterialId,
+      weatherBarrierThickness,
+      'weather',
+      WALL_SHEATHING_THICKNESS,
+      `${wall.id} wall WRB`,
+    )
+  }
   addWallSurfaceLayer(
     context,
     wall,
@@ -921,12 +1068,34 @@ function addWall(
     wallBaseIn,
     studDepth,
     project.walls.sidingMaterialId,
-    SIDING_THICKNESS,
+    cladding.thicknessIn,
     'finish',
-    WALL_SHEATHING_THICKNESS,
+    WALL_SHEATHING_THICKNESS + weatherBarrierThickness,
     `${wall.id} wall siding`,
   )
-  addWallJointFlashing(context, wall, wallBaseIn, studDepth, verticalPanels, openings)
+  if (cladding.horizontalJoint.treatment === 'z-flashing') {
+    addWallJointFlashing(
+      context,
+      wall,
+      wallBaseIn,
+      studDepth,
+      claddingVerticalPanels,
+      openings,
+      cladding.thicknessIn,
+      weatherBarrierThickness,
+    )
+  }
+  if (cladding.openingHeadFlashing === 'z-flashing') {
+    addOpeningHeadFlashing(
+      context,
+      wall,
+      wallBaseIn,
+      studDepth,
+      openings,
+      cladding.thicknessIn,
+      weatherBarrierThickness,
+    )
+  }
 
   const envelopeHeight = height + floorEdgeDepth
 
@@ -946,6 +1115,15 @@ function addWall(
       areaSqIn: Math.max(0, sidingSpan * envelopeHeight - openingArea),
     },
   )
+  if (cladding.requiresWeatherBarrier) {
+    context.surfaces.push({
+      id: `${wall.id}-weather-barrier-area`,
+      label: `${wall.id} wall WRB`,
+      assembly: 'walls',
+      materialId: project.walls.weatherBarrierMaterialId,
+      areaSqIn: Math.max(0, wall.surfaceSpanIn * envelopeHeight - openingArea),
+    })
+  }
   if (project.walls.insulationMaterialId) {
     context.surfaces.push({
       id: `${wall.id}-insulation-area`,
@@ -973,9 +1151,12 @@ function addExteriorCornerTrim(
   floorFrameBottomIn: number,
 ): void {
   const { widthIn, lengthIn, wallHeightIn } = context.project.dimensions
+  const cladding = getPanelCladdingInstallation(context.project.walls.sidingMaterialId)
+  const weatherBarrierThickness = cladding.requiresWeatherBarrier ? WEATHER_BARRIER_THICKNESS : 0
   const trimMaterial: MaterialId = 'exterior-1x4-trim'
   const [trimThickness, trimWidth] = lumberDimensions(trimMaterial)
-  const exteriorLayerDepth = WALL_SHEATHING_THICKNESS + SIDING_THICKNESS
+  const exteriorLayerDepth =
+    WALL_SHEATHING_THICKNESS + weatherBarrierThickness + cladding.thicknessIn
   const trimBottom = Math.max(
     floorFrameBottomIn,
     constructionRules.site.minimumUntreatedWoodClearanceIn,
@@ -1028,21 +1209,32 @@ function addGableSurfaceLayer(
     fixedIn: number
     thickness: number
     materialId: MaterialId
-    layer: 'sheathing' | 'finish'
+    layer: 'sheathing' | 'weather' | 'finish'
     label: string
     idHint: string
     supportCentersIn: number[]
+    panelWidthIn?: number
+    panelHeightIn?: number
+    courseJointGapIn?: number
+    courseJointPlacement?: 'centered' | 'clearance-above'
+    bottomClearanceIn?: number
+    panelJointGapIn?: number
   },
 ): void {
+  const panelWidthIn = options.panelWidthIn ?? PANEL_SHORT_EDGE
+  const panelHeightIn = options.panelHeightIn ?? PANEL_LONG_EDGE
   const horizontalPanels = insetPanelJoints(
-    supportAwarePanelSegments(
-      options.spanIn,
-      PANEL_SHORT_EDGE,
-      options.supportCentersIn,
-      PANEL_SHORT_EDGE,
-    ),
+    supportAwarePanelSegments(options.spanIn, panelWidthIn, options.supportCentersIn, panelWidthIn),
+    options.panelJointGapIn ?? PANEL_GAP,
   )
-  const verticalPanels = insetPanelJoints(positivePanelSegments(options.riseIn, PANEL_LONG_EDGE))
+  const verticalPanels = insetPanelJoints(
+    positivePanelSegments(options.riseIn, panelHeightIn),
+    options.courseJointGapIn ?? PANEL_GAP,
+    options.courseJointPlacement,
+  ).map((panel, index) => ({
+    ...panel,
+    start: panel.start + (index === 0 ? (options.bottomClearanceIn ?? 0) : 0),
+  }))
   const triangle: ProfilePoint[] = [
     [-options.spanIn / 2, 0],
     [options.spanIn / 2, 0],
@@ -1062,7 +1254,7 @@ function addGableSurfaceLayer(
       if (panel.length < 3 || Math.abs(signedArea(panel)) < 0.01) continue
 
       addMember(context, {
-        label: `${options.label} panel ${panelIndex}`,
+        label: `${options.label} ${options.layer === 'weather' ? 'section' : 'panel'} ${panelIndex}`,
         assembly: 'walls',
         layer: options.layer,
         materialId: options.materialId,
@@ -1074,6 +1266,44 @@ function addGableSurfaceLayer(
         idHint: options.idHint,
       })
     }
+  }
+}
+
+function addGableJointFlashing(
+  context: GeneratorContext,
+  wall: { id: 'front' | 'back'; fixedIn: number; outward: 1 | -1 },
+  baseY: number,
+  widthIn: number,
+  riseIn: number,
+  studDepth: number,
+  jointHeightsIn: number[],
+  claddingThicknessIn: number,
+  weatherBarrierThicknessIn: number,
+): void {
+  const projection = constructionRules.flashing.projectionIn
+  const visibleHeight = constructionRules.flashing.visibleHeightIn
+  const fixedIn =
+    wall.fixedIn +
+    wall.outward *
+      (studDepth / 2 +
+        WALL_SHEATHING_THICKNESS +
+        weatherBarrierThicknessIn +
+        claddingThicknessIn +
+        projection / 2)
+
+  for (const height of jointHeightsIn) {
+    const span = widthIn * (1 - height / riseIn)
+    if (span <= 0.5) continue
+    addMember(context, {
+      label: `${wall.id} gable horizontal Z-flashing`,
+      assembly: 'walls',
+      layer: 'weather',
+      materialId: 'z-flashing',
+      size: [span, visibleHeight, projection],
+      position: [0, baseY + height, fixedIn],
+      cutLengthIn: span,
+      idHint: 'gable-z-flashing',
+    })
   }
 }
 
@@ -1089,10 +1319,15 @@ function addGableEndFraming(
   const { widthIn, lengthIn, wallHeightIn } = project.dimensions
   const studMaterial = project.walls.studSize as MaterialId
   const [, studDepth] = lumberDimensions(studMaterial)
+  const cladding = getPanelCladdingInstallation(project.walls.sidingMaterialId)
+  const weatherBarrierThickness = cladding.requiresWeatherBarrier ? WEATHER_BARRIER_THICKNESS : 0
   const baseY = wallBaseIn + wallHeightIn
   const gableAreaSqIn = widthIn * riseIn
   const framingPlane = lengthIn / 2 - studDepth / 2
   const gableLayoutPositions = edgeDatumMemberCenters(widthIn, widthIn, project.walls.spacingIn)
+  const claddingPanelJoints = positivePanelSegments(riseIn, cladding.panelHeightIn)
+    .slice(0, -1)
+    .map((panel) => panel.end)
   if (!gableLayoutPositions.some((position) => Math.abs(position) < 0.01)) {
     gableLayoutPositions.push(0)
     gableLayoutPositions.sort((a, b) => a - b)
@@ -1180,20 +1415,62 @@ function addGableEndFraming(
       idHint: 'gable-sheathing',
       supportCentersIn: gableLayoutPositions,
     })
+    if (cladding.requiresWeatherBarrier) {
+      addGableSurfaceLayer(context, {
+        spanIn: widthIn,
+        riseIn,
+        baseY,
+        fixedIn:
+          wall.fixedIn +
+          wall.outward * (studDepth / 2 + WALL_SHEATHING_THICKNESS + weatherBarrierThickness / 2),
+        thickness: weatherBarrierThickness,
+        materialId: project.walls.weatherBarrierMaterialId,
+        layer: 'weather',
+        label: `${wall.id} gable WRB`,
+        idHint: 'gable-wrb',
+        supportCentersIn: gableLayoutPositions,
+        panelWidthIn: widthIn,
+        panelHeightIn: riseIn,
+        courseJointGapIn: 0,
+      })
+    }
     addGableSurfaceLayer(context, {
       spanIn: widthIn,
       riseIn,
       baseY,
       fixedIn:
         wall.fixedIn +
-        wall.outward * (studDepth / 2 + WALL_SHEATHING_THICKNESS + SIDING_THICKNESS / 2),
-      thickness: SIDING_THICKNESS,
+        wall.outward *
+          (studDepth / 2 +
+            WALL_SHEATHING_THICKNESS +
+            weatherBarrierThickness +
+            cladding.thicknessIn / 2),
+      thickness: cladding.thicknessIn,
       materialId: project.walls.sidingMaterialId,
       layer: 'finish',
       label: `${wall.id} gable siding`,
       idHint: 'gable-siding',
       supportCentersIn: gableLayoutPositions,
+      panelWidthIn: cladding.panelWidthIn,
+      panelHeightIn: cladding.panelHeightIn,
+      courseJointGapIn: cladding.horizontalJoint.clearanceAboveIn,
+      courseJointPlacement: 'clearance-above',
+      bottomClearanceIn: cladding.horizontalJoint.clearanceAboveIn,
+      panelJointGapIn: cladding.verticalJointGapIn,
     })
+    if (cladding.horizontalJoint.treatment === 'z-flashing') {
+      addGableJointFlashing(
+        context,
+        wall,
+        baseY,
+        widthIn,
+        riseIn,
+        studDepth,
+        [0, ...claddingPanelJoints],
+        cladding.thicknessIn,
+        weatherBarrierThickness,
+      )
+    }
   }
 
   context.surfaces.push(
@@ -1212,6 +1489,15 @@ function addGableEndFraming(
       areaSqIn: gableAreaSqIn,
     },
   )
+  if (cladding.requiresWeatherBarrier) {
+    context.surfaces.push({
+      id: 'gable-weather-barrier-area',
+      label: 'Gable end WRB',
+      assembly: 'walls',
+      materialId: project.walls.weatherBarrierMaterialId,
+      areaSqIn: gableAreaSqIn,
+    })
+  }
   if (project.walls.insulationMaterialId) {
     context.surfaces.push({
       id: 'gable-insulation-area',

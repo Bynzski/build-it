@@ -33,7 +33,7 @@ The reference design includes:
 - Rectangular 2×4 walls framed 16 inches on center by default.
 - A gable roof with adjustable pitch and overhang.
 - A framed door opening and optional rectangular windows.
-- Floor, wall, gable, and roof sheathing laid out as visible 4×8 panels, plus basic siding and roofing layers.
+- Floor, wall, gable, and roof sheathing laid out as visible 4×8 panels, plus a water-resistive barrier, basic siding, and roofing layers.
 - Optional insulation and interior finish layers.
 
 Member sizes and spacing are modeling inputs, not span approval. The reference design must exercise every shared system: editing, framing, openings, geometry, validation, saving, guidance, and estimation.
@@ -44,7 +44,7 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 
 - Update the model immediately when design values change.
 - Show the main construction layers and framing in a simplified form.
-- Provide distinct framing, sheathing, finished-exterior, and combined X-ray inspection views.
+- Provide distinct framing, sheathing, weather-barrier, finished-exterior, and combined X-ray inspection views.
 - Let the user fit the camera to the current building without changing the design.
 - Prevent invalid geometry, such as openings outside a wall.
 - Use inches internally and display dimensions clearly as feet and inches.
@@ -63,7 +63,7 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 ### Construction System
 
 - Support conventional wood framing as the initial construction type.
-- Include basic foundation, floor, wall, roof, sheathing, siding, and roofing assemblies.
+- Include basic foundation, floor, wall, roof, sheathing, weather-barrier, siding, and roofing assemblies.
 - Initially support 2×4 and 2×6 walls with 16-inch and 24-inch framing spacing.
 - Model single bottom plates, double top plates, corners, and framed openings.
 - Model the reference gable roof as paired profiled rafters, a ridge board, rafter ties, supported rake overhangs, and slope-cut gable framing.
@@ -71,7 +71,8 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Establish studs, joists, and rafters from one outside-edge layout datum so panel end joints remain aligned with framing.
 - Center structural panel end joints over framing; add explicit backing or blocking where openings or horizontal joints interrupt primary framing.
 - Treat framed wall height and exterior-envelope height separately; wall sheathing and siding must close the subfloor edge and overlap the rim rather than stopping at the deck, while maintaining the configured ground clearance.
-- Use supported lower closure strips from 4×8 offcuts for the reference shed and flash horizontal panel-siding joints as required by the siding assembly.
+- Use supported lower closure strips from 4×8 offcuts for the reference shed and flash every weather-exposed horizontal cladding interruption as required by the selected siding assembly, including wall-to-gable joints and opening heads.
+- Keep structural panel joints, cladding joints, opening flashing, and roof flashing as distinct construction details; they do not share one generic seam treatment.
 - Derive panel layouts from structural faces; use explicit corner-lap and trim rules instead of enlarging every sheet grid by finish thickness.
 - Derive visible member profiles and semantic cut intent from the same construction dimensions.
 - Apply practical rules for dimensions, framing layout, and supported openings.
@@ -83,6 +84,7 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Initially support standard US lumber sizes and 4×8 sheet goods.
 - Explain when a dimension or component placement creates notable extra material or waste.
 - Allow standard materials and defaults to be configured without changing geometry code.
+- Store cladding layout, clearance, joint, and flashing behavior in material installation profiles rather than branching on product names in geometry code.
 - Keep recommendations advisory; unusual dimensions remain valid when construction rules allow them.
 
 Guidance has three levels:
@@ -108,7 +110,7 @@ Guidance has three levels:
 
 ### Materials
 
-- Estimate primary lumber, panels, siding, roofing, insulation, and finish materials.
+- Estimate primary lumber, panels, weather barrier, flashing, siding, roofing, insulation, and finish materials.
 - Recalculate quantities when the design changes.
 - Provide both a construction breakdown and a grouped purchase estimate.
 - Show conceptual per-member cut intent where it is needed to explain assembly fit.
@@ -127,6 +129,14 @@ Guidance has three levels:
 - **Testing:** Unit tests for construction and estimation rules, plus a small browser test suite.
 
 The app will be local-first and require no server, account, or cloud database. Tracked designs will live in a top-level `designs/` directory and can be rebuilt from a Git checkout.
+
+### Assembly Direction
+
+- Treat `shed` and `cabin` as intent presets, not separate geometry engines.
+- A preset should propose a coherent foundation, structural, weather-control, insulation, and finish assembly; the project file should save the resolved choices explicitly.
+- Keep the weather-control assembly valid independently of insulation. A simple shed may omit thermal and interior layers, while a cabin may add insulation, air control, climate-appropriate vapor control, and an interior finish.
+- Resolve material-specific installation behavior through typed profiles. Future panel, lap, board-and-batten, metal, or other cladding can provide its own layout and joint rules while reusing the wall geometry.
+- Keep code- or climate-dependent recommendations in guidance until BuildIt has enough project context to select them safely.
 
 The MVP will be a desktop-first web app, developed primarily against Chromium while retaining normal modern Firefox and Safari compatibility. The project will use the MIT license. An installable desktop or PWA version may be considered later.
 
@@ -159,9 +169,9 @@ The reference design can be reconstructed solely from its committed `.buildit.js
 
 ## 7. Open Decisions
 
-- Exact floor, roof, sheathing, siding, and roofing defaults for the reference design.
+- Additional siding and roofing systems after the reference materials.
 - Door and window presets included at launch.
-- Depth of insulation and interior-finish options in the MVP.
+- Shed and cabin assembly presets, including the depth of insulation, air-control, vapor-control, and interior-finish options.
 - Default waste factors and how estimates communicate uncertainty.
 
 ## 8. Product Boundary

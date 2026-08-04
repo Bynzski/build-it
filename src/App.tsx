@@ -21,6 +21,7 @@ type PanelTab = 'design' | 'materials' | 'guidance'
 const viewModes: Array<{ value: ViewMode; label: string }> = [
   { value: 'framing', label: 'Framing' },
   { value: 'sheathing', label: 'Sheathing' },
+  { value: 'weather', label: 'WRB' },
   { value: 'exterior', label: 'Exterior' },
   { value: 'xray', label: 'X-ray' },
 ]

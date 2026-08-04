@@ -39,6 +39,7 @@ export const projectSchema = z.object({
     studSize: wallSizeSchema,
     spacingIn: spacingSchema,
     sheathingMaterialId: z.literal('osb-7-16'),
+    weatherBarrierMaterialId: z.literal('housewrap-wrb').default('housewrap-wrb'),
     sidingMaterialId: z.literal('t1-11-5-8'),
     insulationMaterialId: z.literal('fiberglass-r13').nullable(),
     interiorMaterialId: z.literal('drywall-1-2').nullable(),

@@ -12,6 +12,8 @@ test('loads, edits, and estimates the reference shed', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Sheathing' }).click()
   await expect(page.getByRole('button', { name: 'Sheathing' })).toHaveClass(/is-active/)
+  await page.getByRole('button', { name: 'WRB' }).click()
+  await expect(page.getByRole('button', { name: 'WRB' })).toHaveClass(/is-active/)
   await page.getByRole('button', { name: 'Exterior' }).click()
   await expect(page.getByRole('button', { name: 'Exterior' })).toHaveClass(/is-active/)
   await page.getByRole('button', { name: 'Fit view' }).click()
@@ -23,6 +25,7 @@ test('loads, edits, and estimates the reference shed', async ({ page }) => {
   await page.getByRole('button', { name: 'Materials' }).click()
   await expect(page.getByRole('heading', { name: 'Purchase estimate' })).toBeVisible()
   await expect(page.getByText('Metal roofing coverage')).toBeVisible()
+  await expect(page.getByText('Housewrap water-resistive barrier')).toBeVisible()
 
   await page.getByRole('button', { name: 'Guidance' }).click()
   await expect(page.getByText('Width is near a sheet boundary')).toBeVisible()

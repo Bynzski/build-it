@@ -6,11 +6,11 @@ BuildIt is a local-first, material-aware 3D designer for basic sheds, cabins, an
 
 ## Current MVP
 
-- Interactive framing, sheathing, finished-exterior, and X-ray views with camera fit
+- Interactive framing, sheathing, WRB, finished-exterior, and X-ray views with camera fit
 - Drag handles and exact width, length, and wall-height inputs
 - Skid foundation, platform floor, framed walls, gable roof, doors, and windows
 - Explicit 4×8 floor, wall, gable, and roof panel layouts with staggered joints and opening cuts
-- Stock-aware 92⅝-inch wall studs with offcut-sized rim closure panels and modeled Z-flashing
+- Stock-aware 92⅝-inch wall studs with offcut-sized rim closure panels, continuous WRB, and assembly-driven flashing
 - Profiled rafters with ridge, birdsmouth, tail-cut, rafter-tie, and rake-support details
 - Configurable common framing sizes and 16/24-inch spacing
 - Optional insulation and interior finish quantities
@@ -53,7 +53,7 @@ Project JSON
 
 The construction domain under `src/domain/` does not depend on React or Three.js. Project files store authored inputs only; generated meshes and material totals are rebuilt on load.
 
-Width and length are outside-to-outside framing dimensions. Studs, joists, rafters, and panel seams share that outside-edge layout datum; structural panel end joints must land on framing, and interrupted edges receive modeled backing or blocking. Shared construction conventions—including panel sizes, joint spacing, sheathing corner ownership, and exterior trim—live in the domain layer rather than being special-cased per design.
+Width and length are outside-to-outside framing dimensions. Studs, joists, rafters, and panel seams share that outside-edge layout datum; structural panel end joints must land on framing, and interrupted edges receive modeled backing or blocking. Shared construction conventions—including panel sizes, joint spacing, sheathing corner ownership, and exterior trim—live in the domain layer rather than being special-cased per design. Cladding materials carry typed installation profiles so layout, clearance, and flashing behavior can change without adding product-name checks to geometry code.
 
 Important paths:
 

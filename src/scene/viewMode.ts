@@ -1,6 +1,6 @@
 import type { MemberLayer } from '../domain/construction'
 
-export type ViewMode = 'framing' | 'sheathing' | 'exterior' | 'xray'
+export type ViewMode = 'framing' | 'sheathing' | 'weather' | 'exterior' | 'xray'
 
 export interface MemberPresentation {
   visible: boolean
@@ -13,12 +13,13 @@ export function memberPresentation(viewMode: ViewMode, layer: MemberLayer): Memb
     viewMode === 'xray' ||
     (viewMode === 'framing' && layer === 'framing') ||
     (viewMode === 'sheathing' && layer === 'sheathing') ||
-    (viewMode === 'exterior' && layer === 'finish')
+    (viewMode === 'weather' && layer === 'weather') ||
+    (viewMode === 'exterior' && (layer === 'weather' || layer === 'finish'))
   const transparent = viewMode === 'xray' && layer !== 'framing'
 
   return {
     visible,
     transparent,
-    opacity: transparent ? (layer === 'finish' ? 0.2 : 0.12) : 0.92,
+    opacity: transparent ? (layer === 'finish' ? 0.2 : layer === 'weather' ? 0.16 : 0.12) : 0.92,
   }
 }

@@ -1,5 +1,20 @@
 export type MaterialCategory = 'lumber' | 'panel' | 'coverage' | 'linear'
 
+export interface PanelCladdingInstallation {
+  layout: 'panel'
+  thicknessIn: number
+  panelWidthIn: number
+  panelHeightIn: number
+  verticalJointGapIn: number
+  horizontalJoint: {
+    treatment: 'z-flashing'
+    clearanceAboveIn: number
+  }
+  openingClearanceIn: number
+  openingHeadFlashing: 'z-flashing'
+  requiresWeatherBarrier: boolean
+}
+
 export interface MaterialDefinition {
   id: string
   name: string
@@ -9,6 +24,7 @@ export interface MaterialDefinition {
   actualDepthIn?: number
   availableLengthsIn?: number[]
   coverageSqFt?: number
+  wallCladding?: PanelCladdingInstallation
   unit: string
   color: string
 }
@@ -100,6 +116,15 @@ export const materialCatalog = {
     unit: '10-foot piece',
     color: '#b8c1c2',
   },
+  'housewrap-wrb': {
+    id: 'housewrap-wrb',
+    name: 'Housewrap water-resistive barrier',
+    shortName: 'Housewrap WRB',
+    category: 'coverage',
+    coverageSqFt: 900,
+    unit: '9×100-foot roll',
+    color: '#d9e4df',
+  },
   'subfloor-23-32': {
     id: 'subfloor-23-32',
     name: '23/32-inch tongue-and-groove subfloor',
@@ -124,6 +149,20 @@ export const materialCatalog = {
     shortName: 'T1-11 siding',
     category: 'panel',
     coverageSqFt: 32,
+    wallCladding: {
+      layout: 'panel',
+      thicknessIn: 5 / 8,
+      panelWidthIn: 48,
+      panelHeightIn: 96,
+      verticalJointGapIn: 1 / 8,
+      horizontalJoint: {
+        treatment: 'z-flashing',
+        clearanceAboveIn: 3 / 8,
+      },
+      openingClearanceIn: 3 / 16,
+      openingHeadFlashing: 'z-flashing',
+      requiresWeatherBarrier: true,
+    },
     unit: '4×8 sheet',
     color: '#92704c',
   },
@@ -160,4 +199,10 @@ export type MaterialId = keyof typeof materialCatalog
 
 export function getMaterial(id: MaterialId): MaterialDefinition {
   return materialCatalog[id]
+}
+
+export function getPanelCladdingInstallation(id: MaterialId): PanelCladdingInstallation {
+  const installation = getMaterial(id).wallCladding
+  if (!installation) throw new Error(`Material ${id} is not configured as panel wall cladding`)
+  return installation
 }
