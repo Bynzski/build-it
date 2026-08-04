@@ -32,12 +32,12 @@ test('dimension handles require a drag and support cancellation', async ({ page 
   await page.goto('/')
   const widthInput = page.getByTestId('design-panel').getByRole('spinbutton').first()
 
-  await page.mouse.move(691, 654)
+  await page.mouse.move(691, 656)
   await expect(page.getByText('Click and drag')).toBeVisible()
   await page.mouse.move(725, 640)
   await expect(widthInput).toHaveValue('96')
 
-  await page.mouse.move(691, 654)
+  await page.mouse.move(691, 656)
   await page.mouse.down()
   await page.mouse.move(725, 665, { steps: 5 })
   await expect(widthInput).not.toHaveValue('96')
@@ -45,7 +45,7 @@ test('dimension handles require a drag and support cancellation', async ({ page 
   await expect(widthInput).toHaveValue('96')
   await page.mouse.up()
 
-  await page.mouse.move(691, 654)
+  await page.mouse.move(691, 656)
   await page.mouse.down()
   await page.mouse.move(714, 661, { steps: 4 })
   await page.mouse.up()

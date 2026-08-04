@@ -6,6 +6,7 @@ export const constructionRules = {
     shortEdgeIn: 48,
     longEdgeIn: 96,
     jointGapIn: 1 / 8,
+    sidingHorizontalGapIn: 3 / 8,
   },
   layers: {
     subfloorThicknessIn: 23 / 32,
@@ -20,7 +21,23 @@ export const constructionRules = {
     trimThicknessIn: 0.75,
   },
   plateThicknessIn: 1.5,
+  walls: {
+    standardEightFootStudIn: 92 + 5 / 8,
+    precutStudLengthsIn: [92 + 5 / 8, 104 + 5 / 8, 116 + 5 / 8],
+    panelEdgeFastenerSetbackIn: 3 / 8,
+    rimCoverage: 'clearance-limited',
+  },
+  flashing: {
+    projectionIn: 3 / 4,
+    visibleHeightIn: 1 / 8,
+  },
+  site: {
+    minimumUntreatedWoodClearanceIn: 6,
+  },
 } as const
+
+export const standardEightFootWallHeightIn =
+  constructionRules.walls.standardEightFootStudIn + constructionRules.plateThicknessIn * 3
 
 export function wallPanelLayoutSpan(
   wallId: WallId,

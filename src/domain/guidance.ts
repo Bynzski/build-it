@@ -1,5 +1,6 @@
 import type { BuildItProject, Opening, WallId } from '../model/project'
 import type { GuidanceItem } from './construction'
+import { constructionRules } from './constructionRules'
 import { formatFeetInches } from './units'
 
 function panelSuggestion(
@@ -17,6 +18,26 @@ function panelSuggestion(
     title: `${label} is near a sheet boundary`,
     message: `Changing ${label.toLowerCase()} from ${formatFeetInches(value)} to ${formatFeetInches(nearest)} aligns it with 4×8 sheet goods and may reduce offcuts.`,
     field,
+    suggestedValueIn: nearest,
+  }
+}
+
+function wallHeightSuggestion(value: number): GuidanceItem | undefined {
+  const standardHeights = constructionRules.walls.precutStudLengthsIn.map(
+    (studLength) => studLength + constructionRules.plateThicknessIn * 3,
+  )
+  const nearest = standardHeights.reduce((closest, candidate) =>
+    Math.abs(candidate - value) < Math.abs(closest - value) ? candidate : closest,
+  )
+  const difference = nearest - value
+  if (Math.abs(difference) < 0.01 || Math.abs(difference) > 12) return undefined
+
+  return {
+    id: 'precut-fit-wallHeightIn',
+    level: 'suggestion',
+    title: 'Wall height is near a precut-stud height',
+    message: `Changing framed wall height from ${formatFeetInches(value)} to ${formatFeetInches(nearest)} uses a standard precut stud with single bottom and double top plates.`,
+    field: 'wallHeightIn',
     suggestedValueIn: nearest,
   }
 }
@@ -41,7 +62,7 @@ export function getGuidance(project: BuildItProject): GuidanceItem[] {
   for (const suggestion of [
     panelSuggestion('widthIn', 'Width', widthIn),
     panelSuggestion('lengthIn', 'Length', lengthIn),
-    panelSuggestion('wallHeightIn', 'Wall height', wallHeightIn),
+    wallHeightSuggestion(wallHeightIn),
   ]) {
     if (suggestion) items.push(suggestion)
   }

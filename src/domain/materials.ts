@@ -1,4 +1,4 @@
-export type MaterialCategory = 'lumber' | 'panel' | 'coverage'
+export type MaterialCategory = 'lumber' | 'panel' | 'coverage' | 'linear'
 
 export interface MaterialDefinition {
   id: string
@@ -90,6 +90,15 @@ export const materialCatalog = {
     availableLengthsIn: [96, 120, 144, 192],
     unit: 'board',
     color: '#b88954',
+  },
+  'z-flashing': {
+    id: 'z-flashing',
+    name: 'Galvanized Z-flashing',
+    shortName: 'Z-flashing',
+    category: 'linear',
+    availableLengthsIn: [120],
+    unit: '10-foot piece',
+    color: '#b8c1c2',
   },
   'subfloor-23-32': {
     id: 'subfloor-23-32',

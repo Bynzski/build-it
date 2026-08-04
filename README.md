@@ -10,6 +10,7 @@ BuildIt is a local-first, material-aware 3D designer for basic sheds, cabins, an
 - Drag handles and exact width, length, and wall-height inputs
 - Skid foundation, platform floor, framed walls, gable roof, doors, and windows
 - Explicit 4×8 floor, wall, gable, and roof panel layouts with staggered joints and opening cuts
+- Stock-aware 92⅝-inch wall studs with offcut-sized rim closure panels and modeled Z-flashing
 - Profiled rafters with ridge, birdsmouth, tail-cut, rafter-tie, and rake-support details
 - Configurable common framing sizes and 16/24-inch spacing
 - Optional insulation and interior finish quantities

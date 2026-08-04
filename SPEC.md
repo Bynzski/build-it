@@ -29,7 +29,7 @@ The first complete design path will be an 8×10-foot wood-framed shed. It is the
 The reference design includes:
 
 - A skid foundation and framed platform floor.
-- An adjustable wall height with an 8-foot default.
+- An adjustable framed wall height with a standard 8-foot-room default using 92⅝-inch precut studs.
 - Rectangular 2×4 walls framed 16 inches on center by default.
 - A gable roof with adjustable pitch and overhang.
 - A framed door opening and optional rectangular windows.
@@ -70,6 +70,8 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Lay out sheet goods in standard 4×8 panels with explicit joints, staggered floor and roof courses, and opening/slope cuts.
 - Establish studs, joists, and rafters from one outside-edge layout datum so panel end joints remain aligned with framing.
 - Center structural panel end joints over framing; add explicit backing or blocking where openings or horizontal joints interrupt primary framing.
+- Treat framed wall height and exterior-envelope height separately; wall sheathing and siding must close the subfloor edge and overlap the rim rather than stopping at the deck, while maintaining the configured ground clearance.
+- Use supported lower closure strips from 4×8 offcuts for the reference shed and flash horizontal panel-siding joints as required by the siding assembly.
 - Derive panel layouts from structural faces; use explicit corner-lap and trim rules instead of enlarging every sheet grid by finish thickness.
 - Derive visible member profiles and semantic cut intent from the same construction dimensions.
 - Apply practical rules for dimensions, framing layout, and supported openings.

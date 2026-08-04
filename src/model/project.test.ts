@@ -7,7 +7,7 @@ describe('BuildIt project schema', () => {
     expect(referenceDesign.dimensions).toEqual({
       widthIn: 96,
       lengthIn: 120,
-      wallHeightIn: 96,
+      wallHeightIn: 97.125,
     })
     expect(referenceDesign.openings).toHaveLength(2)
   })

@@ -41,6 +41,21 @@ describe('construction generator', () => {
     )
   })
 
+  it('recommends standard precut wall heights without warning on the reference preset', () => {
+    const reference = generateBuilding(referenceDesign)
+    const custom = cloneProject(referenceDesign)
+    custom.dimensions.wallHeightIn = 96
+    const changed = generateBuilding(custom)
+
+    expect(reference.guidance.some((item) => item.field === 'wallHeightIn')).toBe(false)
+    expect(changed.guidance).toContainEqual(
+      expect.objectContaining({
+        id: 'precut-fit-wallHeightIn',
+        suggestedValueIn: 97 + 1 / 8,
+      }),
+    )
+  })
+
   it('blocks openings that extend beyond a wall', () => {
     const invalid = cloneProject(referenceDesign)
     invalid.openings[0].centerOffsetIn = 45
@@ -155,9 +170,10 @@ describe('construction generator', () => {
     const building = generateBuilding(referenceDesign)
     const back = building.members
       .filter((member) => member.label.startsWith('back wall sheathing panel'))
+      .filter((member) => member.size[1] > 90)
       .sort((a, b) => a.position[0] - b.position[0])
-    const front = building.members.filter((member) =>
-      member.label.startsWith('front wall sheathing panel'),
+    const front = building.members.filter(
+      (member) => member.label.startsWith('front wall sheathing panel') && member.position[1] > 20,
     )
 
     expect(back).toHaveLength(2)
@@ -182,11 +198,13 @@ describe('construction generator', () => {
 
   it('uses side-wall sheathing for corner laps without creating an extra sheet', () => {
     const building = generateBuilding(referenceDesign)
-    const endWallPanels = building.members.filter((member) =>
-      member.label.startsWith('back wall sheathing panel'),
+    const endWallPanels = building.members.filter(
+      (member) => member.label.startsWith('back wall sheathing panel') && member.size[1] > 90,
     )
     const sideWallPanels = building.members
-      .filter((member) => member.label.startsWith('right wall sheathing panel'))
+      .filter(
+        (member) => member.label.startsWith('right wall sheathing panel') && member.size[1] > 90,
+      )
       .sort((a, b) => a.position[2] - b.position[2])
 
     expect(endWallPanels).toHaveLength(2)
@@ -198,13 +216,17 @@ describe('construction generator', () => {
   it('centers wall panel end joints over the common framing layout', () => {
     const building = generateBuilding(referenceDesign)
     const backPanels = building.members
-      .filter((member) => member.label.startsWith('back wall sheathing panel'))
+      .filter(
+        (member) => member.label.startsWith('back wall sheathing panel') && member.size[1] > 90,
+      )
       .sort((a, b) => a.position[0] - b.position[0])
     const backStudCenters = building.members
       .filter((member) => member.label === 'back wall stud')
       .map((member) => member.position[0])
     const rightPanels = building.members
-      .filter((member) => member.label.startsWith('right wall sheathing panel'))
+      .filter(
+        (member) => member.label.startsWith('right wall sheathing panel') && member.size[1] > 90,
+      )
       .sort((a, b) => a.position[2] - b.position[2])
     const rightStudCenters = building.members
       .filter((member) => member.label === 'right wall stud')
@@ -243,6 +265,61 @@ describe('construction generator', () => {
     )
   })
 
+  it('covers the subfloor edge and rim with an offcut-sized lower panel course', () => {
+    const building = generateBuilding(referenceDesign)
+    const lowerBackPanels = building.members.filter(
+      (member) => member.label.startsWith('back wall sheathing panel') && member.size[1] < 12,
+    )
+    const backFloorJoist = building.members.find((member) => member.label === 'Back floor joist')
+    const upperBackPanels = building.members.filter(
+      (member) => member.label.startsWith('back wall sheathing panel') && member.size[1] > 90,
+    )
+    const envelopeBottom = Math.min(
+      ...lowerBackPanels.map((member) => member.position[1] - member.size[1] / 2),
+    )
+    const lowerCourseTop = Math.max(
+      ...lowerBackPanels.map((member) => member.position[1] + member.size[1] / 2),
+    )
+    const upperCourseBottom = Math.min(
+      ...upperBackPanels.map((member) => member.position[1] - member.size[1] / 2),
+    )
+
+    expect(lowerBackPanels).toHaveLength(2)
+    expect(lowerBackPanels.every((member) => member.size[1] < 8)).toBe(true)
+    const rimBottom = (backFloorJoist?.position[1] ?? 0) - (backFloorJoist?.size[1] ?? 0) / 2
+    expect(envelopeBottom).toBe(6)
+    expect(envelopeBottom - rimBottom).toBeCloseTo(0.5)
+    expect(upperCourseBottom - lowerCourseTop).toBeCloseTo(1 / 8)
+  })
+
+  it('uses standard precut studs and flashes the horizontal siding joint', () => {
+    const building = generateBuilding(referenceDesign)
+    const wallStuds = building.members.filter((member) => member.id.startsWith('wall-stud-'))
+    const flashing = building.members.filter((member) => member.id.startsWith('z-flashing-'))
+    const backSiding = building.members.filter((member) =>
+      member.label.startsWith('back wall siding panel'),
+    )
+    const lowerSidingTop = Math.max(
+      ...backSiding
+        .filter((member) => member.size[1] < 12)
+        .map((member) => member.position[1] + member.size[1] / 2),
+    )
+    const upperSidingBottom = Math.min(
+      ...backSiding
+        .filter((member) => member.size[1] > 90)
+        .map((member) => member.position[1] - member.size[1] / 2),
+    )
+    const flashingPurchase = building.shoppingList.find((item) => item.materialId === 'z-flashing')
+
+    expect(wallStuds.every((member) => member.cutLengthIn === 92 + 5 / 8)).toBe(true)
+    expect(flashing.length).toBeGreaterThanOrEqual(4)
+    expect(flashing.every((member) => member.layer === 'finish')).toBe(true)
+    expect(upperSidingBottom - lowerSidingTop).toBeCloseTo(3 / 8)
+    expect(flashingPurchase).toEqual(
+      expect.objectContaining({ purchaseLengthIn: 120, unit: '10-foot piece' }),
+    )
+  })
+
   it('covers siding corners with eight cut-to-height trim boards', () => {
     const building = generateBuilding(referenceDesign)
     const trim = building.members.filter((member) => member.id.startsWith('corner-trim-'))
@@ -252,8 +329,8 @@ describe('construction generator', () => {
 
     expect(trim).toHaveLength(8)
     expect(trim.every((member) => member.layer === 'finish')).toBe(true)
-    expect(trim.every((member) => member.cutLengthIn === 96)).toBe(true)
-    expect(trimPurchase).toEqual(expect.objectContaining({ count: 8, purchaseLengthIn: 96 }))
+    expect(trim.every((member) => member.cutLengthIn === 102 + 27 / 32)).toBe(true)
+    expect(trimPurchase).toEqual(expect.objectContaining({ count: 8, purchaseLengthIn: 120 }))
   })
 
   it('profiles common rafters with flush ridge, birdsmouth, and tail cuts', () => {

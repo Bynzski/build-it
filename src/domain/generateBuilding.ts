@@ -54,6 +54,7 @@ const PLATE_THICKNESS = constructionRules.plateThicknessIn
 const PANEL_SHORT_EDGE = constructionRules.panels.shortEdgeIn
 const PANEL_LONG_EDGE = constructionRules.panels.longEdgeIn
 const PANEL_GAP = constructionRules.panels.jointGapIn
+const SIDING_HORIZONTAL_GAP = constructionRules.panels.sidingHorizontalGapIn
 
 interface PanelSegment {
   start: number
@@ -84,10 +85,10 @@ function panelSegments(
   return segments
 }
 
-function insetPanelJoints(segments: PanelSegment[]): PanelSegment[] {
+function insetPanelJoints(segments: PanelSegment[], gapIn = PANEL_GAP): PanelSegment[] {
   return segments.map((segment, index) => ({
-    start: segment.start + (index > 0 ? PANEL_GAP / 2 : 0),
-    end: segment.end - (index < segments.length - 1 ? PANEL_GAP / 2 : 0),
+    start: segment.start + (index > 0 ? gapIn / 2 : 0),
+    end: segment.end - (index < segments.length - 1 ? gapIn / 2 : 0),
   }))
 }
 
@@ -227,7 +228,11 @@ function wallMemberSize(
   return wall.orientation === 'x' ? [along, vertical, depth] : [depth, vertical, along]
 }
 
-function addFloor(context: GeneratorContext): { wallBaseIn: number; floorAreaSqIn: number } {
+function addFloor(context: GeneratorContext): {
+  wallBaseIn: number
+  floorFrameBottomIn: number
+  floorAreaSqIn: number
+} {
   const { project } = context
   const { widthIn, lengthIn } = project.dimensions
   const skidMaterial: MaterialId = 'pt-4x6'
@@ -324,6 +329,7 @@ function addFloor(context: GeneratorContext): { wallBaseIn: number; floorAreaSqI
 
   return {
     wallBaseIn: skidDepth + joistDepth + SUBFLOOR_THICKNESS,
+    floorFrameBottomIn: skidDepth,
     floorAreaSqIn,
   }
 }
@@ -542,16 +548,23 @@ function addWallPanelJointBlocking(
   context: GeneratorContext,
   wall: WallDefinition,
   wallBaseIn: number,
-  wallHeightIn: number,
+  verticalPanels: PanelSegment[],
   studMaterial: MaterialId,
   studDepth: number,
   layoutPositions: number[],
   openings: Opening[],
 ): void {
-  const verticalPanels = panelSegments(wallHeightIn, PANEL_LONG_EDGE)
-  const horizontalJoints = verticalPanels.slice(0, -1).map((panel) => panel.end + wallHeightIn / 2)
+  const horizontalJoints = verticalPanels.slice(0, -1).map((panel) => panel.end)
 
   for (const height of horizontalJoints) {
+    if (Math.abs(height) < 0.01) continue
+    const upperPanelFastenerHeight =
+      height + PANEL_GAP / 2 + constructionRules.walls.panelEdgeFastenerSetbackIn
+    const jointFallsOnBottomPlate = height > 0 && height < PLATE_THICKNESS
+    const needsBackingAboveBottomPlate =
+      jointFallsOnBottomPlate && upperPanelFastenerHeight > PLATE_THICKNESS
+    if (jointFallsOnBottomPlate && !needsBackingAboveBottomPlate) continue
+    const blockingCenterHeight = needsBackingAboveBottomPlate ? PLATE_THICKNESS * 1.5 : height
     const openingRanges = openings
       .filter(
         (opening) =>
@@ -575,7 +588,7 @@ function addWallPanelJointBlocking(
           studMaterial,
           studDepth,
           (blocking.start + blocking.end) / 2,
-          wallBaseIn + height,
+          wallBaseIn + blockingCenterHeight,
           blocking.end - blocking.start,
           PLATE_THICKNESS,
           `${wall.id} sheathing joint blocking`,
@@ -584,6 +597,22 @@ function addWallPanelJointBlocking(
       }
     }
   }
+}
+
+function wallEnvelopeVerticalSegments(
+  wallHeightIn: number,
+  floorEdgeDepthIn: number,
+): PanelSegment[] {
+  const bottom = -floorEdgeDepthIn
+  const segments: PanelSegment[] = []
+  let cursor = wallHeightIn
+
+  while (cursor - bottom > PANEL_LONG_EDGE + 0.01) {
+    segments.unshift({ start: cursor - PANEL_LONG_EDGE, end: cursor })
+    cursor -= PANEL_LONG_EDGE
+  }
+  if (cursor - bottom > 0.01) segments.unshift({ start: bottom, end: cursor })
+  return segments
 }
 
 interface SurfaceCell {
@@ -639,10 +668,11 @@ function extendOutsidePanelEdges(
 
 function wallSurfaceCells(
   layoutSpanIn: number,
-  heightIn: number,
+  rawVerticalPanels: PanelSegment[],
   openings: Opening[],
   supportCentersIn: number[],
   edgeExtensionIn = 0,
+  verticalJointGapIn = PANEL_GAP,
 ): SurfaceCell[] {
   const horizontalPanels = insetPanelJoints(
     extendOutsidePanelEdges(
@@ -650,12 +680,7 @@ function wallSurfaceCells(
       edgeExtensionIn,
     ),
   )
-  const verticalPanels = insetPanelJoints(panelSegments(heightIn, PANEL_LONG_EDGE)).map(
-    (segment) => ({
-      start: segment.start + heightIn / 2,
-      end: segment.end + heightIn / 2,
-    }),
-  )
+  const verticalPanels = insetPanelJoints(rawVerticalPanels, verticalJointGapIn)
   const rectangles: PanelRectangle[] = []
   let panelIndex = 0
 
@@ -687,6 +712,56 @@ function wallSurfaceCells(
   }))
 }
 
+function addWallJointFlashing(
+  context: GeneratorContext,
+  wall: WallDefinition,
+  wallBaseIn: number,
+  studDepth: number,
+  verticalPanels: PanelSegment[],
+  openings: Opening[],
+): void {
+  const flashingMaterial: MaterialId = 'z-flashing'
+  const projection = constructionRules.flashing.projectionIn
+  const visibleHeight = constructionRules.flashing.visibleHeightIn
+  const fixedOffset =
+    wall.outward * (studDepth / 2 + WALL_SHEATHING_THICKNESS + SIDING_THICKNESS + projection / 2)
+
+  for (const joint of verticalPanels.slice(0, -1).map((panel) => panel.end)) {
+    const openingRanges = openings
+      .filter(
+        (opening) =>
+          joint >= opening.sillHeightIn - 0.01 &&
+          joint <= opening.sillHeightIn + opening.heightIn + 0.01,
+      )
+      .map((opening) => ({
+        start: opening.centerOffsetIn - opening.widthIn / 2,
+        end: opening.centerOffsetIn + opening.widthIn / 2,
+      }))
+    const wallSegments = subtractHorizontalRanges(
+      { start: -wall.surfaceSpanIn / 2, end: wall.surfaceSpanIn / 2 },
+      openingRanges,
+    )
+
+    for (const segment of wallSegments) {
+      addMember(context, {
+        label: `${wall.id} wall horizontal Z-flashing`,
+        assembly: 'walls',
+        layer: 'finish',
+        materialId: flashingMaterial,
+        size: wallMemberSize(wall, segment.end - segment.start, visibleHeight, projection),
+        position: wallVector(
+          wall,
+          (segment.start + segment.end) / 2,
+          wallBaseIn + joint,
+          fixedOffset,
+        ),
+        cutLengthIn: segment.end - segment.start,
+        idHint: 'z-flashing',
+      })
+    }
+  }
+}
+
 function addWallSurfaceLayer(
   context: GeneratorContext,
   wall: WallDefinition,
@@ -713,7 +788,12 @@ function addWallSurfaceLayer(
   }
 }
 
-function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: number): number {
+function addWall(
+  context: GeneratorContext,
+  wall: WallDefinition,
+  wallBaseIn: number,
+  floorFrameBottomIn: number,
+): number {
   const { project } = context
   const height = project.dimensions.wallHeightIn
   const studMaterial = project.walls.studSize as MaterialId
@@ -721,6 +801,12 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
   const openings = openingOnWall(project, wall.id)
   const studLength = height - PLATE_THICKNESS * 3
   const studBase = wallBaseIn + PLATE_THICKNESS
+  const envelopeBottomIn = Math.max(
+    floorFrameBottomIn,
+    constructionRules.site.minimumUntreatedWoodClearanceIn,
+  )
+  const floorEdgeDepth = wallBaseIn - envelopeBottomIn
+  const verticalPanels = wallEnvelopeVerticalSegments(height, floorEdgeDepth)
   const layoutPositions = edgeDatumMemberCenters(
     wall.surfaceSpanIn,
     wall.spanIn,
@@ -786,7 +872,7 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
     context,
     wall,
     wallBaseIn,
-    height,
+    verticalPanels,
     studMaterial,
     studDepth,
     layoutPositions,
@@ -802,17 +888,18 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
   const sidingSpan = wallPanelLayoutSpan(wall.id, wall.surfaceSpanIn, 'siding')
   const sheathingCells = wallSurfaceCells(
     wall.surfaceSpanIn,
-    height,
+    verticalPanels,
     openings,
     layoutPositions,
     (sheathingSpan - wall.surfaceSpanIn) / 2,
   )
   const sidingCells = wallSurfaceCells(
     wall.surfaceSpanIn,
-    height,
+    verticalPanels,
     openings,
     layoutPositions,
     (sidingSpan - wall.surfaceSpanIn) / 2,
+    SIDING_HORIZONTAL_GAP,
   )
 
   addWallSurfaceLayer(
@@ -839,6 +926,9 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
     WALL_SHEATHING_THICKNESS,
     `${wall.id} wall siding`,
   )
+  addWallJointFlashing(context, wall, wallBaseIn, studDepth, verticalPanels, openings)
+
+  const envelopeHeight = height + floorEdgeDepth
 
   context.surfaces.push(
     {
@@ -846,14 +936,14 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
       label: `${wall.id} wall sheathing`,
       assembly: 'walls',
       materialId: project.walls.sheathingMaterialId,
-      areaSqIn: Math.max(0, sheathingSpan * height - openingArea),
+      areaSqIn: Math.max(0, sheathingSpan * envelopeHeight - openingArea),
     },
     {
       id: `${wall.id}-siding-area`,
       label: `${wall.id} wall siding`,
       assembly: 'walls',
       materialId: project.walls.sidingMaterialId,
-      areaSqIn: Math.max(0, sidingSpan * height - openingArea),
+      areaSqIn: Math.max(0, sidingSpan * envelopeHeight - openingArea),
     },
   )
   if (project.walls.insulationMaterialId) {
@@ -877,12 +967,21 @@ function addWall(context: GeneratorContext, wall: WallDefinition, wallBaseIn: nu
   return netArea
 }
 
-function addExteriorCornerTrim(context: GeneratorContext, wallBaseIn: number): void {
+function addExteriorCornerTrim(
+  context: GeneratorContext,
+  wallBaseIn: number,
+  floorFrameBottomIn: number,
+): void {
   const { widthIn, lengthIn, wallHeightIn } = context.project.dimensions
   const trimMaterial: MaterialId = 'exterior-1x4-trim'
   const [trimThickness, trimWidth] = lumberDimensions(trimMaterial)
   const exteriorLayerDepth = WALL_SHEATHING_THICKNESS + SIDING_THICKNESS
-  const centerY = wallBaseIn + wallHeightIn / 2
+  const trimBottom = Math.max(
+    floorFrameBottomIn,
+    constructionRules.site.minimumUntreatedWoodClearanceIn,
+  )
+  const trimHeight = wallBaseIn + wallHeightIn - trimBottom
+  const centerY = trimBottom + trimHeight / 2
 
   for (const xSide of [-1, 1] as const) {
     for (const zSide of [-1, 1] as const) {
@@ -893,13 +992,13 @@ function addExteriorCornerTrim(context: GeneratorContext, wallBaseIn: number): v
         assembly: 'walls',
         layer: 'finish',
         materialId: trimMaterial,
-        size: [trimWidth, wallHeightIn, trimThickness],
+        size: [trimWidth, trimHeight, trimThickness],
         position: [
           xSide * (widthIn / 2 + exteriorLayerDepth + trimThickness - trimWidth / 2),
           centerY,
           zSide * (lengthIn / 2 + exteriorLayerDepth + trimThickness / 2),
         ],
-        cutLengthIn: wallHeightIn,
+        cutLengthIn: trimHeight,
         idHint: 'corner-trim',
       })
       addMember(context, {
@@ -907,13 +1006,13 @@ function addExteriorCornerTrim(context: GeneratorContext, wallBaseIn: number): v
         assembly: 'walls',
         layer: 'finish',
         materialId: trimMaterial,
-        size: [trimThickness, wallHeightIn, trimWidth],
+        size: [trimThickness, trimHeight, trimWidth],
         position: [
           xSide * (widthIn / 2 + exteriorLayerDepth + trimThickness / 2),
           centerY,
           zSide * (lengthIn / 2 + exteriorLayerDepth - trimWidth / 2),
         ],
-        cutLengthIn: wallHeightIn,
+        cutLengthIn: trimHeight,
         idHint: 'corner-trim',
       })
     }
@@ -1459,7 +1558,7 @@ export function generateBuilding(project: BuildItProject): GeneratedBuilding {
     sequence: 0,
   }
   const { widthIn, lengthIn } = project.dimensions
-  const { wallBaseIn, floorAreaSqIn } = addFloor(context)
+  const { wallBaseIn, floorFrameBottomIn, floorAreaSqIn } = addFloor(context)
   const [, studDepth] = lumberDimensions(project.walls.studSize as MaterialId)
   const frontBackPlane = lengthIn / 2 - studDepth / 2
   const sidePlane = widthIn / 2 - studDepth / 2
@@ -1497,8 +1596,11 @@ export function generateBuilding(project: BuildItProject): GeneratedBuilding {
       outward: 1,
     },
   ]
-  let wallAreaSqIn = walls.reduce((area, wall) => area + addWall(context, wall, wallBaseIn), 0)
-  addExteriorCornerTrim(context, wallBaseIn)
+  let wallAreaSqIn = walls.reduce(
+    (area, wall) => area + addWall(context, wall, wallBaseIn, floorFrameBottomIn),
+    0,
+  )
+  addExteriorCornerTrim(context, wallBaseIn, floorFrameBottomIn)
   const { roofAreaSqIn, peakHeightIn, gableAreaSqIn } = addRoof(context, wallBaseIn)
   wallAreaSqIn += gableAreaSqIn
   const estimate = estimateMaterials(context.members, context.surfaces, project.wasteFactorPct)

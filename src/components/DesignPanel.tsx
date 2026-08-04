@@ -113,7 +113,7 @@ export function DesignPanel() {
 
       <FieldGroup
         title="Dimensions"
-        description="Outside framing dimensions. Drag the handles or enter exact values."
+        description="Width and length are outside framing. Height runs from the deck to the top plates; the reference uses standard 92⅝-inch precut studs."
       >
         <NumberField
           label="Width"
@@ -132,10 +132,11 @@ export function DesignPanel() {
           dimension
         />
         <NumberField
-          label="Wall height"
+          label="Framed wall height"
           value={project.dimensions.wallHeightIn}
           min={72}
           max={144}
+          step={0.125}
           onChange={(value) => setDimension('wallHeightIn', value)}
           dimension
         />

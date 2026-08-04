@@ -6,7 +6,7 @@
   "dimensions": {
     "widthIn": 96,
     "lengthIn": 120,
-    "wallHeightIn": 96
+    "wallHeightIn": 97.125
   },
   "foundation": {
     "type": "skids",
