@@ -1,6 +1,7 @@
 import type { BuildItProject, Opening, WallId } from '../model/project'
 import type { GuidanceItem } from './construction'
 import { constructionRules } from './constructionRules'
+import { getRoofCladdingInstallation } from './materials'
 import { formatFeetInches } from './units'
 
 function panelSuggestion(
@@ -150,6 +151,16 @@ export function getGuidance(project: BuildItProject): GuidanceItem[] {
       title: 'Roof overhang exceeds the modeled prescriptive detail',
       message:
         'Rake overhangs above 24 inches need a project-specific support and connection design. BuildIt still displays the geometry but does not validate it.',
+    })
+  }
+
+  const roofCladding = getRoofCladdingInstallation(project.roof.roofingMaterialId)
+  if (project.roof.pitchRise < roofCladding.minimumPitchRise) {
+    items.push({
+      id: 'roofing-minimum-pitch',
+      level: 'blocked',
+      title: 'Roof pitch is too low for the selected exposed-fastener panel',
+      message: `The reference ${roofCladding.gauge}-gauge 9–36 panel requires at least a ${roofCladding.minimumPitchRise}:12 roof pitch. Choose a steeper roof or a roofing system rated for lower slopes.`,
     })
   }
 

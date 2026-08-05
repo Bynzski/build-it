@@ -69,6 +69,19 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
       }),
     [member.profileRegions],
   )
+  const ribOffsets = useMemo(() => {
+    if (!member.ribbedPanel) return []
+    const offsets: number[] = []
+    const panelWidth = member.size[2]
+    for (
+      let offset = -panelWidth / 2;
+      offset < panelWidth / 2 - 0.01;
+      offset += member.ribbedPanel.ribSpacingIn
+    ) {
+      offsets.push(offset)
+    }
+    return offsets
+  }, [member.ribbedPanel, member.size])
 
   if (!assemblyVisible || !presentation.visible) return null
 
@@ -90,12 +103,7 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
     emissive: selected ? '#6d3a00' : '#000000',
     emissiveIntensity: selected ? 0.35 : 0,
     roughness: 0.78,
-    metalness:
-      member.materialId === 'metal-roofing' ||
-      member.materialId === 'z-flashing' ||
-      member.materialId === 'ridge-strap'
-        ? 0.32
-        : 0.02,
+    metalness: material.metallic ? 0.32 : 0.02,
     transparent: isTransparent,
     opacity,
     depthWrite: !isTransparent,
@@ -124,6 +132,37 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
             <extrudeGeometry args={[shape, { depth: extrusion, bevelEnabled: false }]} />
             <meshStandardMaterial {...materialProps} />
             <Edges threshold={15} color={isTransparent ? '#806f58' : '#5f4a32'} />
+          </mesh>
+        ))}
+      </group>
+    )
+  }
+
+  const ribbedPanel = member.ribbedPanel
+  if (member.shape === 'ribbed-panel' && ribbedPanel) {
+    return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: React Three Fiber groups are canvas objects, not DOM elements.
+      <group
+        name={member.label}
+        position={member.position}
+        rotation={member.rotation ?? [0, 0, 0]}
+        onClick={handleClick}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <mesh receiveShadow>
+          <boxGeometry args={member.size} />
+          <meshStandardMaterial {...materialProps} />
+          <Edges threshold={15} color={isTransparent ? '#806f58' : '#263a42'} />
+        </mesh>
+        {ribOffsets.map((offset) => (
+          <mesh
+            key={offset}
+            position={[0, member.size[1] / 2 + ribbedPanel.ribHeightIn / 2, offset]}
+            receiveShadow
+          >
+            <boxGeometry args={[member.size[0], ribbedPanel.ribHeightIn, ribbedPanel.ribWidthIn]} />
+            <meshStandardMaterial {...materialProps} />
           </mesh>
         ))}
       </group>
@@ -358,6 +397,12 @@ function DimensionHandle({
 
   return (
     <group position={position}>
+      <Html center style={{ pointerEvents: 'none' }}>
+        <span
+          data-testid={`dimension-handle-${field}`}
+          style={{ display: 'block', width: 1, height: 1 }}
+        />
+      </Html>
       {hovered || dragging ? (
         <mesh rotation={guideRotation}>
           <cylinderGeometry args={[0.35, 0.35, 34, 8]} />

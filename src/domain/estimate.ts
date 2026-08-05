@@ -45,6 +45,7 @@ export function estimateMaterials(
   const lumberGroups = new Map<string, ShoppingListItem>()
   const cutGroups = new Map<string, CutGroup>()
   const breakdownGroups = new Map<string, ConstructionBreakdownItem>()
+  const exactSurfaceItems: ShoppingListItem[] = []
 
   for (const member of members) {
     if (member.cutLengthIn === undefined) continue
@@ -95,16 +96,29 @@ export function estimateMaterials(
 
   const surfaceGroups = new Map<MaterialId, SurfacePurchaseGroup>()
   for (const surface of surfaces) {
-    const surfaceGroup = surfaceGroups.get(surface.materialId) ?? {
-      coverageAreaSqIn: 0,
-      sourceSheetCount: 0,
-    }
-    if (surface.sourceSheetCount !== undefined) {
-      surfaceGroup.sourceSheetCount += surface.sourceSheetCount
+    if (surface.exactPurchaseCount !== undefined) {
+      const material = getMaterial(surface.materialId)
+      exactSurfaceItems.push({
+        id: `${surface.materialId}:layout:${surface.id}`,
+        materialId: surface.materialId,
+        label: material.name,
+        count: surface.exactPurchaseCount,
+        unit: material.unit,
+        purchaseLengthIn: surface.purchaseLengthIn,
+        note: surface.purchaseNote,
+      })
     } else {
-      surfaceGroup.coverageAreaSqIn += surface.areaSqIn
+      const surfaceGroup = surfaceGroups.get(surface.materialId) ?? {
+        coverageAreaSqIn: 0,
+        sourceSheetCount: 0,
+      }
+      if (surface.sourceSheetCount !== undefined) {
+        surfaceGroup.sourceSheetCount += surface.sourceSheetCount
+      } else {
+        surfaceGroup.coverageAreaSqIn += surface.areaSqIn
+      }
+      surfaceGroups.set(surface.materialId, surfaceGroup)
     }
-    surfaceGroups.set(surface.materialId, surfaceGroup)
 
     const key = `${surface.assembly}:${surface.materialId}`
     const current = breakdownGroups.get(key)
@@ -146,8 +160,8 @@ export function estimateMaterials(
     })
   }
 
-  const shoppingList = [...lumberGroups.values(), ...surfaceItems].sort((a, b) =>
-    a.label.localeCompare(b.label),
+  const shoppingList = [...lumberGroups.values(), ...surfaceItems, ...exactSurfaceItems].sort(
+    (a, b) => a.label.localeCompare(b.label),
   )
 
   return {

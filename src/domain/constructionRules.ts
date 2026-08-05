@@ -11,7 +11,6 @@ export const constructionRules = {
     subfloorThicknessIn: 23 / 32,
     wallSheathingThicknessIn: 7 / 16,
     weatherBarrierThicknessIn: 1 / 32,
-    roofingThicknessIn: 1 / 8,
   },
   wallCorners: {
     sheathingLapOwner: 'side-walls',

@@ -1,4 +1,4 @@
-export type MaterialCategory = 'lumber' | 'panel' | 'coverage' | 'linear'
+export type MaterialCategory = 'lumber' | 'panel' | 'coverage' | 'linear' | 'unit'
 
 export interface PanelCladdingInstallation {
   layout: 'panel'
@@ -15,6 +15,22 @@ export interface PanelCladdingInstallation {
   requiresWeatherBarrier: boolean
 }
 
+export interface ExposedFastenerRoofingInstallation {
+  layout: 'exposed-fastener-panel'
+  gauge: number
+  panelCoverageWidthIn: number
+  majorRibSpacingIn: number
+  majorRibHeightIn: number
+  visualBaseThicknessIn: number
+  visualRibWidthIn: number
+  minimumPitchRise: number
+  eavePanelOverhangIn: number
+  trimWingIn: number
+  maximumFastenerRowSpacingIn: number
+  panelScrewsPerCoverageWidthPerRow: number
+  fastenerPackQuantity: number
+}
+
 export interface MaterialDefinition {
   id: string
   name: string
@@ -25,6 +41,8 @@ export interface MaterialDefinition {
   availableLengthsIn?: number[]
   coverageSqFt?: number
   wallCladding?: PanelCladdingInstallation
+  roofCladding?: ExposedFastenerRoofingInstallation
+  metallic?: boolean
   unit: string
   color: string
 }
@@ -115,6 +133,7 @@ export const materialCatalog = {
     availableLengthsIn: [120],
     unit: '10-foot piece',
     color: '#b8c1c2',
+    metallic: true,
   },
   'ridge-strap': {
     id: 'ridge-strap',
@@ -124,6 +143,7 @@ export const materialCatalog = {
     availableLengthsIn: [36],
     unit: '36-inch strap',
     color: '#9eaaac',
+    metallic: true,
   },
   'housewrap-wrb': {
     id: 'housewrap-wrb',
@@ -177,12 +197,93 @@ export const materialCatalog = {
   },
   'metal-roofing': {
     id: 'metal-roofing',
-    name: 'Metal roofing coverage',
-    shortName: 'Metal roofing',
-    category: 'coverage',
-    coverageSqFt: 25,
-    unit: '100-inch panel',
+    name: '29-gauge 9–36 exposed-fastener roof panel',
+    shortName: '9–36 roof panel',
+    category: 'panel',
+    roofCladding: {
+      layout: 'exposed-fastener-panel',
+      gauge: 29,
+      panelCoverageWidthIn: 36,
+      majorRibSpacingIn: 9,
+      majorRibHeightIn: 3 / 4,
+      visualBaseThicknessIn: 1 / 16,
+      visualRibWidthIn: 3 / 4,
+      minimumPitchRise: 3,
+      eavePanelOverhangIn: 1,
+      trimWingIn: 6,
+      maximumFastenerRowSpacingIn: 36,
+      panelScrewsPerCoverageWidthPerRow: 5,
+      fastenerPackQuantity: 250,
+    },
+    unit: 'custom-cut panel',
     color: '#4f6670',
+    metallic: true,
+  },
+  'synthetic-roof-underlayment': {
+    id: 'synthetic-roof-underlayment',
+    name: 'Metal-roof-compatible synthetic underlayment',
+    shortName: 'Roof underlayment',
+    category: 'coverage',
+    coverageSqFt: 1000,
+    unit: '10-square roll',
+    color: '#7f8c8d',
+  },
+  'metal-eave-trim': {
+    id: 'metal-eave-trim',
+    name: 'Metal eave/drip trim',
+    shortName: 'Eave trim',
+    category: 'linear',
+    availableLengthsIn: [120, 144, 168, 192],
+    unit: 'trim piece',
+    color: '#465e68',
+    metallic: true,
+  },
+  'metal-rake-trim': {
+    id: 'metal-rake-trim',
+    name: 'Metal rake/gable trim',
+    shortName: 'Rake trim',
+    category: 'linear',
+    availableLengthsIn: [120, 144, 168, 192],
+    unit: 'trim piece',
+    color: '#465e68',
+    metallic: true,
+  },
+  'metal-ridge-cap': {
+    id: 'metal-ridge-cap',
+    name: 'Solid metal ridge cap',
+    shortName: 'Ridge cap',
+    category: 'linear',
+    availableLengthsIn: [120, 144, 168, 192],
+    unit: 'ridge-cap piece',
+    color: '#405862',
+    metallic: true,
+  },
+  'metal-eave-closure': {
+    id: 'metal-eave-closure',
+    name: 'Profiled metal-roof eave closure',
+    shortName: 'Eave closure',
+    category: 'linear',
+    availableLengthsIn: [36, 72, 120, 144],
+    unit: 'closure strip',
+    color: '#343e3f',
+  },
+  'metal-ridge-closure': {
+    id: 'metal-ridge-closure',
+    name: 'Profiled solid ridge closure',
+    shortName: 'Ridge closure',
+    category: 'linear',
+    availableLengthsIn: [36, 72, 120, 144],
+    unit: 'closure strip',
+    color: '#343e3f',
+  },
+  'metal-roof-fasteners': {
+    id: 'metal-roof-fasteners',
+    name: 'Color-matched metal roofing screws with sealing washers',
+    shortName: 'Roofing screws',
+    category: 'unit',
+    unit: '250-count box',
+    color: '#596c72',
+    metallic: true,
   },
   'fiberglass-r13': {
     id: 'fiberglass-r13',
@@ -213,5 +314,11 @@ export function getMaterial(id: MaterialId): MaterialDefinition {
 export function getPanelCladdingInstallation(id: MaterialId): PanelCladdingInstallation {
   const installation = getMaterial(id).wallCladding
   if (!installation) throw new Error(`Material ${id} is not configured as panel wall cladding`)
+  return installation
+}
+
+export function getRoofCladdingInstallation(id: MaterialId): ExposedFastenerRoofingInstallation {
+  const installation = getMaterial(id).roofCladding
+  if (!installation) throw new Error(`Material ${id} is not configured as roof cladding`)
   return installation
 }

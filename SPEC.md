@@ -33,7 +33,7 @@ The reference design includes:
 - Rectangular 2×4 walls framed 16 inches on center by default.
 - A gable roof with adjustable pitch and overhang.
 - A framed door opening and optional rectangular windows.
-- Floor, wall, gable, and roof sheathing laid out as visible 4×8 panels, plus a water-resistive barrier, basic siding, and roofing layers.
+- Floor, wall, gable, and roof sheathing laid out as visible 4×8 panels, plus a water-resistive barrier, basic siding, and a 29-gauge 9–36 exposed-fastener metal roof assembly.
 - Optional insulation and interior finish layers.
 
 Member sizes and spacing are modeling inputs, not span approval. The reference design must exercise every shared system: editing, framing, openings, geometry, validation, saving, guidance, and estimation.
@@ -75,6 +75,7 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Treat framed wall height and exterior-envelope height separately; wall sheathing and siding must close the subfloor edge and overlap the rim rather than stopping at the deck, while maintaining the configured ground clearance.
 - Use supported lower closure strips from 4×8 offcuts for the reference shed and flash every weather-exposed horizontal cladding interruption as required by the selected siding assembly, including wall-to-gable joints and opening heads.
 - Keep structural panel joints, cladding joints, opening flashing, and roof flashing as distinct construction details; they do not share one generic seam treatment.
+- Run the reference 36-inch-coverage metal panels continuously from eave to ridge over compatible underlayment, with a one-inch eave extension, eave/drip trim, rake trim, profiled closures, and a solid ridge cap. Derive panel count and order length from the installed layout rather than roof area and blanket sheet waste.
 - Derive panel layouts from structural faces; use explicit corner-lap and trim rules instead of enlarging every sheet grid by finish thickness.
 - Derive visible member profiles and semantic cut intent from the same construction dimensions.
 - Apply practical rules for dimensions, framing layout, and supported openings.
@@ -138,6 +139,7 @@ The app will be local-first and require no server, account, or cloud database. T
 - A preset should propose a coherent foundation, structural, weather-control, insulation, and finish assembly; the project file should save the resolved choices explicitly.
 - Keep the weather-control assembly valid independently of insulation. A simple shed may omit thermal and interior layers, while a cabin may add insulation, air control, climate-appropriate vapor control, and an interior finish.
 - Resolve material-specific installation behavior through typed profiles. Future panel, lap, board-and-batten, metal, or other cladding can provide its own layout and joint rules while reusing the wall geometry.
+- Give roofing materials the same typed installation behavior: coverage width, rib profile, minimum pitch, eave allowance, fastening assumptions, and required trim drive both geometry and estimation.
 - Keep code- or climate-dependent recommendations in guidance until BuildIt has enough project context to select them safely.
 
 The MVP will be a desktop-first web app, developed primarily against Chromium while retaining normal modern Firefox and Safari compatibility. The project will use the MIT license. An installable desktop or PWA version may be considered later.

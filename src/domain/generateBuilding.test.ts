@@ -23,7 +23,13 @@ describe('construction generator', () => {
     expect(lumber.length).toBeGreaterThan(3)
     expect(coverage.some((item) => item.materialId === 'osb-7-16')).toBe(true)
     expect(coverage.some((item) => item.materialId === 'housewrap-wrb')).toBe(true)
-    expect(coverage.some((item) => item.materialId === 'metal-roofing')).toBe(true)
+    expect(building.shoppingList).toContainEqual(
+      expect.objectContaining({
+        materialId: 'metal-roofing',
+        count: 8,
+        purchaseLengthIn: expect.closeTo(Math.hypot(60, 30) + 1),
+      }),
+    )
     expect(building.shoppingList).toContainEqual(
       expect.objectContaining({ materialId: 'ridge-strap', count: 3 }),
     )
@@ -77,6 +83,16 @@ describe('construction generator', () => {
 
     expect(building.guidance).toContainEqual(
       expect.objectContaining({ level: 'warning', id: 'large-roof-overhang' }),
+    )
+  })
+
+  it('blocks the reference exposed-fastener panel below its minimum roof pitch', () => {
+    const lowSlope = cloneProject(referenceDesign)
+    lowSlope.roof.pitchRise = 2
+    const building = generateBuilding(lowSlope)
+
+    expect(building.guidance).toContainEqual(
+      expect.objectContaining({ level: 'blocked', id: 'roofing-minimum-pitch' }),
     )
   })
 
@@ -599,6 +615,54 @@ describe('construction generator', () => {
     ).toBe(true)
     expect(subfascia).toHaveLength(2)
     expect(subfascia.every((member) => member.cutLengthIn === 144)).toBe(true)
+  })
+
+  it('builds a complete exposed-fastener metal roof assembly', () => {
+    const building = generateBuilding(referenceDesign)
+    const panels = building.members.filter((member) => member.id.startsWith('metal-roof-panel-'))
+    const underlayment = building.members.filter((member) =>
+      member.id.startsWith('roof-underlayment-'),
+    )
+    const eaveTrim = building.members.filter((member) => member.id.startsWith('metal-eave-trim-'))
+    const rakeTrim = building.members.filter((member) => member.id.startsWith('metal-rake-trim-'))
+    const ridgeCap = building.members.filter((member) => member.id.startsWith('metal-ridge-cap-'))
+    const eaveClosures = building.members.filter((member) =>
+      member.id.startsWith('metal-eave-closure-'),
+    )
+    const ridgeClosures = building.members.filter((member) =>
+      member.id.startsWith('metal-ridge-closure-'),
+    )
+
+    expect(panels).toHaveLength(8)
+    expect(panels.every((member) => member.shape === 'ribbed-panel')).toBe(true)
+    expect(panels.every((member) => member.size[2] === 36)).toBe(true)
+    expect(panels.every((member) => member.ribbedPanel?.ribSpacingIn === 9)).toBe(true)
+    expect(underlayment).toHaveLength(2)
+    expect(underlayment.every((member) => member.layer === 'weather')).toBe(true)
+    expect(eaveTrim).toHaveLength(2)
+    expect(rakeTrim).toHaveLength(4)
+    expect(ridgeCap).toHaveLength(1)
+    expect(eaveClosures).toHaveLength(2)
+    expect(ridgeClosures).toHaveLength(2)
+    expect(building.shoppingList).toContainEqual(
+      expect.objectContaining({ materialId: 'synthetic-roof-underlayment', count: 1 }),
+    )
+    expect(building.shoppingList).toContainEqual(
+      expect.objectContaining({ materialId: 'metal-roof-fasteners', count: 1 }),
+    )
+  })
+
+  it('balances field-trimmed edge roofing panels around full-width interior panels', () => {
+    const changed = cloneProject(referenceDesign)
+    changed.dimensions.lengthIn = 100
+    const building = generateBuilding(changed)
+    const leftPanels = building.members
+      .filter((member) => member.label.startsWith('Left metal roof panel'))
+      .sort((a, b) => a.position[2] - b.position[2])
+
+    expect(leftPanels.map((member) => member.size[2])).toEqual([26, 36, 36, 26])
+    expect(leftPanels[0].position[2]).toBeCloseTo(-leftPanels[3].position[2])
+    expect(leftPanels[1].position[2]).toBeCloseTo(-leftPanels[2].position[2])
   })
 
   it('keeps bearing gable rafters when no rake overhang needs outlookers', () => {

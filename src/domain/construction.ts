@@ -35,10 +35,15 @@ export interface ConstructionMember {
   position: Vector3Tuple
   rotation?: Vector3Tuple
   cutLengthIn?: number
-  shape?: 'box' | 'gable' | 'profile' | 'cut-panel'
+  shape?: 'box' | 'gable' | 'profile' | 'cut-panel' | 'ribbed-panel'
   profile?: ProfilePoint[]
   profileRegions?: ProfileRegion[]
   profileExtrusionIn?: number
+  ribbedPanel?: {
+    ribSpacingIn: number
+    ribHeightIn: number
+    ribWidthIn: number
+  }
   fabrication?: FabricationSpec
 }
 
@@ -49,6 +54,9 @@ export interface SurfaceQuantity {
   materialId: MaterialId
   areaSqIn: number
   sourceSheetCount?: number
+  exactPurchaseCount?: number
+  purchaseLengthIn?: number
+  purchaseNote?: string
 }
 
 export interface ShoppingListItem {

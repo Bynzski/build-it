@@ -14,7 +14,12 @@ import { constructionRules, wallPanelLayoutSpan } from './constructionRules'
 import { estimateMaterials } from './estimate'
 import { edgeDatumMemberCenters, supportAwarePanelSegments } from './framingLayout'
 import { getGuidance } from './guidance'
-import { getMaterial, getPanelCladdingInstallation, type MaterialId } from './materials'
+import {
+  getMaterial,
+  getPanelCladdingInstallation,
+  getRoofCladdingInstallation,
+  type MaterialId,
+} from './materials'
 
 interface WallDefinition {
   id: WallId
@@ -42,17 +47,17 @@ interface AddMemberOptions {
   rotation?: Vector3Tuple
   cutLengthIn?: number
   idHint?: string
-  shape?: 'box' | 'gable' | 'profile' | 'cut-panel'
+  shape?: 'box' | 'gable' | 'profile' | 'cut-panel' | 'ribbed-panel'
   profile?: ProfilePoint[]
   profileRegions?: ProfileRegion[]
   profileExtrusionIn?: number
+  ribbedPanel?: ConstructionMember['ribbedPanel']
   fabrication?: FabricationSpec
 }
 
 const SUBFLOOR_THICKNESS = constructionRules.layers.subfloorThicknessIn
 const WALL_SHEATHING_THICKNESS = constructionRules.layers.wallSheathingThicknessIn
 const WEATHER_BARRIER_THICKNESS = constructionRules.layers.weatherBarrierThicknessIn
-const ROOFING_THICKNESS = constructionRules.layers.roofingThicknessIn
 const PLATE_THICKNESS = constructionRules.plateThicknessIn
 const PANEL_SHORT_EDGE = constructionRules.panels.shortEdgeIn
 const PANEL_LONG_EDGE = constructionRules.panels.longEdgeIn
@@ -107,6 +112,22 @@ function positivePanelSegments(
     start: segment.start + spanIn / 2,
     end: segment.end + spanIn / 2,
   }))
+}
+
+function centeredCoverageSegments(spanIn: number, coverageWidthIn: number): PanelSegment[] {
+  const panelCount = Math.max(1, Math.ceil(spanIn / coverageWidthIn))
+  if (panelCount === 1) return [{ start: -spanIn / 2, end: spanIn / 2 }]
+
+  const interiorCount = Math.max(0, panelCount - 2)
+  const edgeCoverage = (spanIn - interiorCount * coverageWidthIn) / 2
+  const segments: PanelSegment[] = []
+  let cursor = -spanIn / 2
+  for (let index = 0; index < panelCount; index += 1) {
+    const width = index === 0 || index === panelCount - 1 ? edgeCoverage : coverageWidthIn
+    segments.push({ start: cursor, end: cursor + width })
+    cursor += width
+  }
+  return segments
 }
 
 function clipPolygon(
@@ -177,6 +198,7 @@ function addMember(context: GeneratorContext, options: AddMemberOptions): void {
     profile: options.profile,
     profileRegions: options.profileRegions,
     profileExtrusionIn: options.profileExtrusionIn,
+    ribbedPanel: options.ribbedPanel,
     fabrication: options.fabrication,
   })
 }
@@ -1771,6 +1793,9 @@ function addRoof(
   const roofSlopeLength = Math.hypot(extendedRun, extendedRun * pitch)
   const birdsmouthDepth = (roofBase - bottomY(run)) * cosine
   const rise = run * pitch
+  const roofCladding = getRoofCladdingInstallation(project.roof.roofingMaterialId)
+  const roofPanelLength = roofSlopeLength + roofCladding.eavePanelOverhangIn
+  const roofPanelSegments = centeredCoverageSegments(roofLength, roofCladding.panelCoverageWidthIn)
 
   const bearingRafterGeometry = (side: -1 | 1, fixedIn: number) => {
     const signed = (horizontalRunIn: number): number => side * horizontalRunIn
@@ -2114,7 +2139,10 @@ function addRoof(
   for (const side of [-1, 1] as const) {
     const rotationZ = side === -1 ? angle : -angle
     const sheathingOffset = rafterDepth / 2 + WALL_SHEATHING_THICKNESS / 2
-    const roofingOffset = rafterDepth / 2 + WALL_SHEATHING_THICKNESS + ROOFING_THICKNESS / 2
+    const roofDeckSurfaceOffset = rafterDepth / 2 + WALL_SHEATHING_THICKNESS
+    const underlaymentOffset = roofDeckSurfaceOffset + WEATHER_BARRIER_THICKNESS / 2
+    const roofingOffset =
+      roofDeckSurfaceOffset + WEATHER_BARRIER_THICKNESS + roofCladding.visualBaseThicknessIn / 2
     const slopeCourses = insetPanelJoints(positivePanelSegments(roofSlopeLength, PANEL_SHORT_EDGE))
     let sheathingPanel = 0
     for (const [courseIndex, slope] of slopeCourses.entries()) {
@@ -2146,23 +2174,189 @@ function addRoof(
         })
       }
     }
+
     addMember(context, {
-      label: `${side === -1 ? 'Left' : 'Right'} roofing`,
+      label: `${side === -1 ? 'Left' : 'Right'} roof underlayment`,
       assembly: 'roof',
-      layer: 'finish',
-      materialId: project.roof.roofingMaterialId,
-      size: [roofSlopeLength, ROOFING_THICKNESS, roofLength],
+      layer: 'weather',
+      materialId: 'synthetic-roof-underlayment',
+      size: [roofSlopeLength, WEATHER_BARRIER_THICKNESS, roofLength],
       position: [
-        (side * extendedRun) / 2 + side * Math.sin(angle) * roofingOffset,
-        (centerTailY + centerPeakY) / 2 + Math.cos(angle) * roofingOffset,
+        (side * extendedRun) / 2 + side * Math.sin(angle) * underlaymentOffset,
+        (centerTailY + centerPeakY) / 2 + Math.cos(angle) * underlaymentOffset,
         0,
       ],
       rotation: [0, 0, rotationZ],
-      idHint: 'roofing',
+      idHint: 'roof-underlayment',
     })
+
+    const panelCenterSlopeDistance = roofPanelLength / 2
+    const panelCenterHorizontalRun = panelCenterSlopeDistance * cosine
+    for (const [panelIndex, panel] of roofPanelSegments.entries()) {
+      addMember(context, {
+        label: `${side === -1 ? 'Left' : 'Right'} metal roof panel ${panelIndex + 1}`,
+        assembly: 'roof',
+        layer: 'finish',
+        materialId: project.roof.roofingMaterialId,
+        size: [roofPanelLength, roofCladding.visualBaseThicknessIn, panel.end - panel.start],
+        position: [
+          side * panelCenterHorizontalRun + side * Math.sin(angle) * roofingOffset,
+          centerPeakY -
+            panelCenterSlopeDistance * Math.sin(angle) +
+            Math.cos(angle) * roofingOffset,
+          (panel.start + panel.end) / 2,
+        ],
+        rotation: [0, 0, rotationZ],
+        cutLengthIn: roofPanelLength,
+        shape: 'ribbed-panel',
+        ribbedPanel: {
+          ribSpacingIn: roofCladding.majorRibSpacingIn,
+          ribHeightIn: roofCladding.majorRibHeightIn,
+          ribWidthIn: roofCladding.visualRibWidthIn,
+        },
+        idHint: 'metal-roof-panel',
+      })
+    }
+
+    const eaveClosureSlopeDistance = roofSlopeLength - 1
+    const eaveClosureHorizontalRun = eaveClosureSlopeDistance * cosine
+    const closureOffset =
+      roofDeckSurfaceOffset +
+      WEATHER_BARRIER_THICKNESS +
+      roofCladding.visualBaseThicknessIn +
+      roofCladding.majorRibHeightIn / 2
+    addMember(context, {
+      label: `${side === -1 ? 'Left' : 'Right'} profiled eave closure`,
+      assembly: 'roof',
+      layer: 'finish',
+      materialId: 'metal-eave-closure',
+      size: [1, roofCladding.majorRibHeightIn, roofLength],
+      position: [
+        side * eaveClosureHorizontalRun + side * Math.sin(angle) * closureOffset,
+        centerPeakY - eaveClosureSlopeDistance * Math.sin(angle) + Math.cos(angle) * closureOffset,
+        0,
+      ],
+      rotation: [0, 0, rotationZ],
+      cutLengthIn: roofLength,
+      idHint: 'metal-eave-closure',
+    })
+
+    const ridgeClosureSlopeDistance = roofCladding.trimWingIn / 2
+    const ridgeClosureHorizontalRun = ridgeClosureSlopeDistance * cosine
+    addMember(context, {
+      label: `${side === -1 ? 'Left' : 'Right'} profiled solid ridge closure`,
+      assembly: 'roof',
+      layer: 'finish',
+      materialId: 'metal-ridge-closure',
+      size: [2, roofCladding.majorRibHeightIn, roofLength],
+      position: [
+        side * ridgeClosureHorizontalRun + side * Math.sin(angle) * closureOffset,
+        centerPeakY - ridgeClosureSlopeDistance * Math.sin(angle) + Math.cos(angle) * closureOffset,
+        0,
+      ],
+      rotation: [0, 0, rotationZ],
+      cutLengthIn: roofLength,
+      idHint: 'metal-ridge-closure',
+    })
+
+    const trimOffset = closureOffset + roofCladding.majorRibHeightIn / 2 + 1 / 16
+    addMember(context, {
+      label: `${side === -1 ? 'Left' : 'Right'} eave/drip trim`,
+      assembly: 'roof',
+      layer: 'finish',
+      materialId: 'metal-eave-trim',
+      ...profileGeometry(
+        (() => {
+          const slopePoint = (slopeDistance: number, normalOffset: number): ProfilePoint => [
+            side * slopeDistance * cosine + side * Math.sin(angle) * normalOffset,
+            centerPeakY - slopeDistance * Math.sin(angle) + Math.cos(angle) * normalOffset,
+          ]
+          const innerTop = slopePoint(roofSlopeLength - 2, roofDeckSurfaceOffset + 1 / 16)
+          const outerTop = slopePoint(roofSlopeLength + 1 / 4, roofDeckSurfaceOffset + 1 / 16)
+          const innerBottom = slopePoint(roofSlopeLength - 2, roofDeckSurfaceOffset)
+          return [
+            innerTop,
+            outerTop,
+            [outerTop[0], outerTop[1] - 1.5],
+            [outerTop[0] - (side * 1) / 4, outerTop[1] - 1.5],
+            [outerTop[0] - (side * 1) / 4, outerTop[1] - 1 / 8],
+            innerBottom,
+          ]
+        })(),
+        roofLength + 2,
+        0,
+      ),
+      cutLengthIn: roofLength + 2,
+      idHint: 'metal-eave-trim',
+    })
+
+    for (const end of [-1, 1] as const) {
+      addMember(context, {
+        label: `${end === 1 ? 'Front' : 'Back'} ${side === -1 ? 'left' : 'right'} rake trim`,
+        assembly: 'roof',
+        layer: 'finish',
+        materialId: 'metal-rake-trim',
+        size: [roofPanelLength, 1 / 8, 2.5],
+        position: [
+          side * panelCenterHorizontalRun + side * Math.sin(angle) * trimOffset,
+          centerPeakY - panelCenterSlopeDistance * Math.sin(angle) + Math.cos(angle) * trimOffset,
+          end * (roofLength / 2 - 1.25),
+        ],
+        rotation: [0, 0, rotationZ],
+        cutLengthIn: roofPanelLength,
+        idHint: 'metal-rake-trim',
+      })
+    }
   }
 
+  const ridgeSurfaceOffset =
+    rafterDepth / 2 +
+    WALL_SHEATHING_THICKNESS +
+    WEATHER_BARRIER_THICKNESS +
+    roofCladding.visualBaseThicknessIn +
+    roofCladding.majorRibHeightIn
+  const ridgePeakY = centerPeakY + ridgeSurfaceOffset / cosine + 1 / 4
+  const ridgeWingHorizontalRun = roofCladding.trimWingIn * cosine
+  const ridgeWingDrop = roofCladding.trimWingIn * Math.sin(angle)
+  addMember(context, {
+    label: 'Solid metal ridge cap',
+    assembly: 'roof',
+    layer: 'finish',
+    materialId: 'metal-ridge-cap',
+    ...profileGeometry(
+      [
+        [-ridgeWingHorizontalRun, ridgePeakY - ridgeWingDrop],
+        [0, ridgePeakY],
+        [ridgeWingHorizontalRun, ridgePeakY - ridgeWingDrop],
+        [ridgeWingHorizontalRun, ridgePeakY - ridgeWingDrop - 1 / 16],
+        [0, ridgePeakY - 1 / 16],
+        [-ridgeWingHorizontalRun, ridgePeakY - ridgeWingDrop - 1 / 16],
+      ],
+      roofLength + 2,
+      0,
+    ),
+    cutLengthIn: roofLength + 2,
+    idHint: 'metal-ridge-cap',
+  })
+
   const roofAreaSqIn = 2 * roofSlopeLength * roofLength
+  const metalPanelCount = roofPanelSegments.length * 2
+  const panelFastenerRows =
+    Math.ceil(roofPanelLength / roofCladding.maximumFastenerRowSpacingIn) + 1
+  const panelFastenerCount =
+    metalPanelCount * panelFastenerRows * roofCladding.panelScrewsPerCoverageWidthPerRow
+  const sideLapFastenerCount =
+    2 * Math.max(0, roofPanelSegments.length - 1) * (Math.ceil(roofPanelLength / 18) + 1)
+  const trimFastenerCount =
+    Math.ceil(roofLength / roofCladding.majorRibSpacingIn) +
+    Math.ceil((roofPanelLength * 4) / 24) +
+    Math.ceil((roofLength * 2) / 24)
+  const plannedFastenerCount = panelFastenerCount + sideLapFastenerCount + trimFastenerCount
+  const edgePanelCoverage = roofPanelSegments[0].end - roofPanelSegments[0].start
+  const edgePanelNote =
+    Math.abs(edgePanelCoverage - roofCladding.panelCoverageWidthIn) < 0.01
+      ? 'Full-width panels fit the roof length exactly.'
+      : `The two edge panels on each slope are field-trimmed symmetrically to ${edgePanelCoverage.toFixed(2)} in coverage.`
   context.surfaces.push(
     {
       id: 'roof-sheathing-area',
@@ -2172,15 +2366,34 @@ function addRoof(
       areaSqIn: roofAreaSqIn,
     },
     {
+      id: 'roof-underlayment-area',
+      label: 'Roof underlayment area',
+      assembly: 'roof',
+      materialId: 'synthetic-roof-underlayment',
+      areaSqIn: roofAreaSqIn,
+    },
+    {
       id: 'roofing-area',
-      label: 'Roofing area',
+      label: 'Laid-out 9–36 metal roof panels',
       assembly: 'roof',
       materialId: project.roof.roofingMaterialId,
       areaSqIn: roofAreaSqIn,
+      exactPurchaseCount: metalPanelCount,
+      purchaseLengthIn: roofPanelLength,
+      purchaseNote: `${metalPanelCount} layout-derived panels at 36 in net coverage. ${edgePanelNote} Includes a 1 in eave extension; no blanket panel waste added.`,
+    },
+    {
+      id: 'metal-roof-fasteners',
+      label: 'Metal roof fastener planning allowance',
+      assembly: 'roof',
+      materialId: 'metal-roof-fasteners',
+      areaSqIn: 0,
+      exactPurchaseCount: Math.ceil(plannedFastenerCount / roofCladding.fastenerPackQuantity),
+      purchaseNote: `Approximately ${plannedFastenerCount} panel, sidelap, and trim screws. Confirm the selected manufacturer's fastening pattern and local wind requirements.`,
     },
   )
 
-  const peakHeightIn = topY(0) + Math.cos(angle) * (WALL_SHEATHING_THICKNESS + ROOFING_THICKNESS)
+  const peakHeightIn = ridgePeakY
   return { roofAreaSqIn, peakHeightIn, gableAreaSqIn }
 }
 

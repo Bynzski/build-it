@@ -75,4 +75,32 @@ describe('material estimation', () => {
       }),
     )
   })
+
+  it('preserves exact layout-derived purchases without applying blanket waste', () => {
+    const result = estimateMaterials(
+      [],
+      [
+        {
+          id: 'roof-panels',
+          label: 'Roof panels',
+          assembly: 'roof',
+          materialId: 'metal-roofing',
+          areaSqIn: 100 * 144,
+          exactPurchaseCount: 8,
+          purchaseLengthIn: 81.5,
+          purchaseNote: 'Layout-derived panel count',
+        },
+      ],
+      10,
+    )
+
+    expect(result.shoppingList).toContainEqual(
+      expect.objectContaining({
+        materialId: 'metal-roofing',
+        count: 8,
+        purchaseLengthIn: 81.5,
+        note: 'Layout-derived panel count',
+      }),
+    )
+  })
 })
