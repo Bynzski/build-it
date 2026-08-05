@@ -104,6 +104,9 @@ describe('construction generator', () => {
 
     expect(building.shoppingList.some((item) => item.materialId === 'fiberglass-r13')).toBe(true)
     expect(building.shoppingList.some((item) => item.materialId === 'drywall-1-2')).toBe(true)
+    expect(building.shoppingList).toContainEqual(
+      expect.objectContaining({ materialId: 'drywall-screws-1-1-4' }),
+    )
   })
 
   it('butts wall framing at square corners and closes the exterior layers', () => {
@@ -648,7 +651,40 @@ describe('construction generator', () => {
       expect.objectContaining({ materialId: 'synthetic-roof-underlayment', count: 1 }),
     )
     expect(building.shoppingList).toContainEqual(
-      expect.objectContaining({ materialId: 'metal-roof-fasteners', count: 1 }),
+      expect.objectContaining({ materialId: 'metal-panel-screws', count: 1 }),
+    )
+    expect(building.shoppingList).toContainEqual(
+      expect.objectContaining({ materialId: 'metal-stitch-screws', count: 1 }),
+    )
+    expect(building.shoppingList).toContainEqual(
+      expect.objectContaining({ materialId: 'metal-trim-screws', count: 1 }),
+    )
+  })
+
+  it('derives fastener allowances from every modeled building system', () => {
+    const building = generateBuilding(referenceDesign)
+    const assemblies = new Set(building.consumables.map((quantity) => quantity.assembly))
+    const materials = new Set(building.consumables.map((quantity) => quantity.materialId))
+
+    expect(assemblies).toEqual(new Set(['floor', 'walls', 'roof']))
+    expect(materials).toEqual(
+      new Set([
+        '8d-common-nails',
+        '10d-common-nails',
+        '16d-framing-nails',
+        '8d-subfloor-nails',
+        'siding-panel-nails',
+        'exterior-trim-nails',
+        'cap-fasteners',
+        'metal-panel-screws',
+        'metal-stitch-screws',
+        'metal-trim-screws',
+      ]),
+    )
+    expect(building.consumables.every((quantity) => quantity.requiredCount > 0)).toBe(true)
+    expect(building.consumables.every((quantity) => quantity.overagePct === 10)).toBe(true)
+    expect(building.guidance).toContainEqual(
+      expect.objectContaining({ id: 'fastener-planning-boundary' }),
     )
   })
 

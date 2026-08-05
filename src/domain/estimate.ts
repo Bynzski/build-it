@@ -1,6 +1,7 @@
 import type {
   ConstructionBreakdownItem,
   ConstructionMember,
+  ConsumableQuantity,
   ShoppingListItem,
   SurfaceQuantity,
 } from './construction'
@@ -24,6 +25,11 @@ interface SurfacePurchaseGroup {
   sourceSheetCount: number
 }
 
+interface ConsumablePurchaseGroup {
+  adjustedRequiredCount: number
+  notes: Set<string>
+}
+
 function packedStockCount(cutsIn: number[], stockLengthIn: number): number {
   const sawKerfIn = 1 / 8
   const remainingByBoard: number[] = []
@@ -41,6 +47,7 @@ export function estimateMaterials(
   members: ConstructionMember[],
   surfaces: SurfaceQuantity[],
   wasteFactorPct: number,
+  consumables: ConsumableQuantity[] = [],
 ): EstimateResult {
   const lumberGroups = new Map<string, ShoppingListItem>()
   const cutGroups = new Map<string, CutGroup>()
@@ -160,9 +167,54 @@ export function estimateMaterials(
     })
   }
 
-  const shoppingList = [...lumberGroups.values(), ...surfaceItems, ...exactSurfaceItems].sort(
-    (a, b) => a.label.localeCompare(b.label),
+  const consumableGroups = new Map<MaterialId, ConsumablePurchaseGroup>()
+  for (const consumable of consumables) {
+    const adjustedRequiredCount = Math.ceil(
+      (consumable.requiredCount * (100 + consumable.overagePct)) / 100,
+    )
+    const group = consumableGroups.get(consumable.materialId) ?? {
+      adjustedRequiredCount: 0,
+      notes: new Set<string>(),
+    }
+    group.adjustedRequiredCount += adjustedRequiredCount
+    group.notes.add(consumable.note)
+    consumableGroups.set(consumable.materialId, group)
+
+    const breakdownKey = `${consumable.assembly}:${consumable.materialId}`
+    const breakdown = breakdownGroups.get(breakdownKey)
+    if (breakdown) breakdown.count = (breakdown.count ?? 0) + Math.ceil(consumable.requiredCount)
+    else {
+      breakdownGroups.set(breakdownKey, {
+        id: breakdownKey,
+        assembly: consumable.assembly,
+        materialId: consumable.materialId,
+        label: getMaterial(consumable.materialId).shortName,
+        count: Math.ceil(consumable.requiredCount),
+      })
+    }
+  }
+
+  const consumableItems: ShoppingListItem[] = [...consumableGroups.entries()].map(
+    ([materialId, group]) => {
+      const material = getMaterial(materialId)
+      const packageQuantity = material.packageQuantity ?? 1
+      return {
+        id: `${materialId}:consumable`,
+        materialId,
+        label: material.name,
+        count: Math.ceil(group.adjustedRequiredCount / packageQuantity),
+        unit: material.unit,
+        note: `Approximately ${group.adjustedRequiredCount} required including connection-specific planning overage. ${[...group.notes].join(' ')}`,
+      }
+    },
   )
+
+  const shoppingList = [
+    ...lumberGroups.values(),
+    ...surfaceItems,
+    ...exactSurfaceItems,
+    ...consumableItems,
+  ].sort((a, b) => a.label.localeCompare(b.label))
 
   return {
     shoppingList,

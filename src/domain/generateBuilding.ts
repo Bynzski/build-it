@@ -12,6 +12,7 @@ import type {
 } from './construction'
 import { constructionRules, wallPanelLayoutSpan } from './constructionRules'
 import { estimateMaterials } from './estimate'
+import { estimateFasteners } from './fasteners'
 import { edgeDatumMemberCenters, supportAwarePanelSegments } from './framingLayout'
 import { getGuidance } from './guidance'
 import {
@@ -2341,17 +2342,6 @@ function addRoof(
 
   const roofAreaSqIn = 2 * roofSlopeLength * roofLength
   const metalPanelCount = roofPanelSegments.length * 2
-  const panelFastenerRows =
-    Math.ceil(roofPanelLength / roofCladding.maximumFastenerRowSpacingIn) + 1
-  const panelFastenerCount =
-    metalPanelCount * panelFastenerRows * roofCladding.panelScrewsPerCoverageWidthPerRow
-  const sideLapFastenerCount =
-    2 * Math.max(0, roofPanelSegments.length - 1) * (Math.ceil(roofPanelLength / 18) + 1)
-  const trimFastenerCount =
-    Math.ceil(roofLength / roofCladding.majorRibSpacingIn) +
-    Math.ceil((roofPanelLength * 4) / 24) +
-    Math.ceil((roofLength * 2) / 24)
-  const plannedFastenerCount = panelFastenerCount + sideLapFastenerCount + trimFastenerCount
   const edgePanelCoverage = roofPanelSegments[0].end - roofPanelSegments[0].start
   const edgePanelNote =
     Math.abs(edgePanelCoverage - roofCladding.panelCoverageWidthIn) < 0.01
@@ -2381,15 +2371,6 @@ function addRoof(
       exactPurchaseCount: metalPanelCount,
       purchaseLengthIn: roofPanelLength,
       purchaseNote: `${metalPanelCount} layout-derived panels at 36 in net coverage. ${edgePanelNote} Includes a 1 in eave extension; no blanket panel waste added.`,
-    },
-    {
-      id: 'metal-roof-fasteners',
-      label: 'Metal roof fastener planning allowance',
-      assembly: 'roof',
-      materialId: 'metal-roof-fasteners',
-      areaSqIn: 0,
-      exactPurchaseCount: Math.ceil(plannedFastenerCount / roofCladding.fastenerPackQuantity),
-      purchaseNote: `Approximately ${plannedFastenerCount} panel, sidelap, and trim screws. Confirm the selected manufacturer's fastening pattern and local wind requirements.`,
     },
   )
 
@@ -2450,11 +2431,18 @@ export function generateBuilding(project: BuildItProject): GeneratedBuilding {
   addExteriorCornerTrim(context, wallBaseIn, floorFrameBottomIn)
   const { roofAreaSqIn, peakHeightIn, gableAreaSqIn } = addRoof(context, wallBaseIn)
   wallAreaSqIn += gableAreaSqIn
-  const estimate = estimateMaterials(context.members, context.surfaces, project.wasteFactorPct)
+  const consumables = estimateFasteners(project, context.members, context.surfaces)
+  const estimate = estimateMaterials(
+    context.members,
+    context.surfaces,
+    project.wasteFactorPct,
+    consumables,
+  )
 
   return {
     members: context.members,
     surfaces: context.surfaces,
+    consumables,
     shoppingList: estimate.shoppingList,
     breakdown: estimate.breakdown,
     guidance: getGuidance(project),

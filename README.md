@@ -15,6 +15,7 @@ BuildIt is a local-first, material-aware 3D designer for basic sheds, cabins, an
 - Configurable common framing sizes and 16/24-inch spacing
 - Optional insulation and interior finish quantities
 - Live construction breakdown and grouped purchase estimate
+- Assembly-derived fastener allowances, kept separate by purpose and rounded to approximate purchase packages
 - Conceptual per-member cut intent derived from the visible framing geometry
 - Material-fit suggestions, construction warnings, and invalid-geometry blockers
 - Undo/redo, local recovery autosave, and portable `.buildit.json` files
@@ -51,7 +52,7 @@ Project JSON
     → React Three Fiber scene
 ```
 
-The construction domain under `src/domain/` does not depend on React or Three.js. Project files store authored inputs only; generated meshes and material totals are rebuilt on load.
+The construction domain under `src/domain/` does not depend on React or Three.js. Project files store authored inputs only; generated meshes and material totals are rebuilt on load. Fastener quantities are purchasing allowances derived from modeled connections and installation patterns, not an engineered fastening, uplift, or site-anchoring schedule.
 
 Width and length are outside-to-outside framing dimensions. Studs, joists, rafters, and panel seams share that outside-edge layout datum; structural panel end joints must land on framing, and interrupted edges receive modeled backing or blocking. Wall openings are stored as cuts in their original source sheets, so L-, C-, and U-shaped remnants remain one selectable panel and purchase quantities do not treat opening cutouts as automatic savings. A rake overhang uses a dropped gable top plate and on-edge outlookers that cantilever back to the first full common rafter; the fly rafter is an unnotched rake subfascia. Shared construction conventions—including panel sizes, joint spacing, sheathing corner ownership, exterior trim, and roof connection limits—live in the domain layer rather than being special-cased per design. Cladding and roofing materials carry typed installation profiles so layout, clearance, flashing, roof-panel coverage, rib geometry, and trim behavior can change without adding product-name checks to geometry code. The reference roof uses continuous 36-inch-coverage exposed-fastener panels over synthetic underlayment with eave, rake, closure, and solid-ridge components; its purchase count and order length come from the visible panel layout.
 

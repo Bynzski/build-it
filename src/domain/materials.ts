@@ -26,9 +26,9 @@ export interface ExposedFastenerRoofingInstallation {
   minimumPitchRise: number
   eavePanelOverhangIn: number
   trimWingIn: number
-  maximumFastenerRowSpacingIn: number
-  panelScrewsPerCoverageWidthPerRow: number
-  fastenerPackQuantity: number
+  panelFastenersPerSquare: number
+  sideLapFastenerSpacingIn: number
+  trimFastenerSpacingIn: number
 }
 
 export interface MaterialDefinition {
@@ -43,6 +43,7 @@ export interface MaterialDefinition {
   wallCladding?: PanelCladdingInstallation
   roofCladding?: ExposedFastenerRoofingInstallation
   metallic?: boolean
+  packageQuantity?: number
   unit: string
   color: string
 }
@@ -211,9 +212,9 @@ export const materialCatalog = {
       minimumPitchRise: 3,
       eavePanelOverhangIn: 1,
       trimWingIn: 6,
-      maximumFastenerRowSpacingIn: 36,
-      panelScrewsPerCoverageWidthPerRow: 5,
-      fastenerPackQuantity: 250,
+      panelFastenersPerSquare: 80,
+      sideLapFastenerSpacingIn: 12,
+      trimFastenerSpacingIn: 12,
     },
     unit: 'custom-cut panel',
     color: '#4f6670',
@@ -276,13 +277,113 @@ export const materialCatalog = {
     unit: 'closure strip',
     color: '#343e3f',
   },
-  'metal-roof-fasteners': {
-    id: 'metal-roof-fasteners',
-    name: 'Color-matched metal roofing screws with sealing washers',
-    shortName: 'Roofing screws',
+  '16d-framing-nails': {
+    id: '16d-framing-nails',
+    name: '16d framing nails',
+    shortName: '16d framing nails',
     category: 'unit',
+    packageQuantity: 250,
+    unit: 'approximately 250-count box',
+    color: '#697476',
+    metallic: true,
+  },
+  '10d-common-nails': {
+    id: '10d-common-nails',
+    name: '10d common framing nails',
+    shortName: '10d common nails',
+    category: 'unit',
+    packageQuantity: 250,
+    unit: 'approximately 250-count box',
+    color: '#707b7d',
+    metallic: true,
+  },
+  '8d-common-nails': {
+    id: '8d-common-nails',
+    name: '8d common sheathing and framing nails',
+    shortName: '8d common nails',
+    category: 'unit',
+    packageQuantity: 500,
+    unit: 'approximately 500-count box',
+    color: '#778184',
+    metallic: true,
+  },
+  '8d-subfloor-nails': {
+    id: '8d-subfloor-nails',
+    name: '8d ring-shank subfloor nails',
+    shortName: 'Subfloor nails',
+    category: 'unit',
+    packageQuantity: 500,
+    unit: 'approximately 500-count box',
+    color: '#7b8587',
+    metallic: true,
+  },
+  'siding-panel-nails': {
+    id: 'siding-panel-nails',
+    name: 'Hot-dip-galvanized ring-shank siding nails',
+    shortName: 'Siding nails',
+    category: 'unit',
+    packageQuantity: 500,
+    unit: 'approximately 500-count box',
+    color: '#899395',
+    metallic: true,
+  },
+  'exterior-trim-nails': {
+    id: 'exterior-trim-nails',
+    name: 'Hot-dip-galvanized exterior trim nails',
+    shortName: 'Exterior trim nails',
+    category: 'unit',
+    packageQuantity: 250,
+    unit: 'approximately 250-count box',
+    color: '#8f999b',
+    metallic: true,
+  },
+  'cap-fasteners': {
+    id: 'cap-fasteners',
+    name: 'Plastic-cap WRB and underlayment fasteners',
+    shortName: 'Cap fasteners',
+    category: 'unit',
+    packageQuantity: 500,
+    unit: '500-count box',
+    color: '#a6aa9c',
+  },
+  'metal-panel-screws': {
+    id: 'metal-panel-screws',
+    name: '#10 metal-roof panel screws with sealing washers',
+    shortName: 'Roof panel screws',
+    category: 'unit',
+    packageQuantity: 250,
     unit: '250-count box',
     color: '#596c72',
+    metallic: true,
+  },
+  'metal-stitch-screws': {
+    id: 'metal-stitch-screws',
+    name: 'Color-matched metal-roof stitch screws',
+    shortName: 'Stitch screws',
+    category: 'unit',
+    packageQuantity: 100,
+    unit: '100-count box',
+    color: '#53676d',
+    metallic: true,
+  },
+  'metal-trim-screws': {
+    id: 'metal-trim-screws',
+    name: 'Low-profile metal roofing trim screws',
+    shortName: 'Metal trim screws',
+    category: 'unit',
+    packageQuantity: 100,
+    unit: '100-count box',
+    color: '#62747a',
+    metallic: true,
+  },
+  'drywall-screws-1-1-4': {
+    id: 'drywall-screws-1-1-4',
+    name: '1-1/4-inch coarse-thread drywall screws',
+    shortName: 'Drywall screws',
+    category: 'unit',
+    packageQuantity: 230,
+    unit: '1-pound box (approximately 230 screws)',
+    color: '#3e4547',
     metallic: true,
   },
   'fiberglass-r13': {

@@ -114,11 +114,14 @@ Guidance has three levels:
 ### Materials
 
 - Estimate primary lumber, panels, weather barrier, flashing, siding, roofing, insulation, and finish materials.
+- Estimate framing nails, structural-panel nails, siding and trim nails, capped membrane fasteners, roofing screws, and selected interior-finish fasteners from the modeled assemblies.
+- Preserve fastener purpose in the estimate instead of combining incompatible products; exposed-fastener roofing, for example, needs distinct panel, stitch, and concealed-trim screws.
+- Apply a small planning overage to calculated fastener quantities and round the purchase estimate to approximate package quantities.
 - Recalculate quantities when the design changes.
 - Provide both a construction breakdown and a grouped purchase estimate.
 - Show conceptual per-member cut intent where it is needed to explain assembly fit.
 - Keep retailer pricing and advanced cut optimization outside the MVP.
-- Clearly label quantities as planning estimates that may require waste factors and field adjustment.
+- Clearly label quantities as planning estimates that may require waste factors and field adjustment. Fastener estimates do not select site anchors, engineered connectors, high-wind uplift hardware, or load-dependent connection schedules; those require project context and confirmation against current code, engineering, and manufacturer instructions.
 
 ## 4. Application Framework
 

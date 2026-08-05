@@ -103,4 +103,42 @@ describe('material estimation', () => {
       }),
     )
   })
+
+  it('combines consumable allowances and rounds them to purchasable packages', () => {
+    const result = estimateMaterials([], [], 10, [
+      {
+        id: 'floor-sheathing-nails',
+        label: 'Floor sheathing nails',
+        assembly: 'floor',
+        materialId: '8d-common-nails',
+        requiredCount: 100,
+        overagePct: 10,
+        note: 'Floor schedule.',
+      },
+      {
+        id: 'roof-sheathing-nails',
+        label: 'Roof sheathing nails',
+        assembly: 'roof',
+        materialId: '8d-common-nails',
+        requiredCount: 400,
+        overagePct: 10,
+        note: 'Roof schedule.',
+      },
+    ])
+
+    expect(result.shoppingList).toContainEqual(
+      expect.objectContaining({
+        materialId: '8d-common-nails',
+        count: 2,
+        unit: 'approximately 500-count box',
+        note: expect.stringContaining('Approximately 550 required'),
+      }),
+    )
+    expect(result.breakdown).toContainEqual(
+      expect.objectContaining({ assembly: 'floor', materialId: '8d-common-nails', count: 100 }),
+    )
+    expect(result.breakdown).toContainEqual(
+      expect.objectContaining({ assembly: 'roof', materialId: '8d-common-nails', count: 400 }),
+    )
+  })
 })

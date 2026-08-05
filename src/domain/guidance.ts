@@ -164,14 +164,13 @@ export function getGuidance(project: BuildItProject): GuidanceItem[] {
     })
   }
 
-  if (items.length === 0) {
-    items.push({
-      id: 'no-guidance',
-      level: 'suggestion',
-      title: 'Design fits the current modeling rules',
-      message: 'No notable geometry or material-fit issues were found for this configuration.',
-    })
-  }
+  items.push({
+    id: 'fastener-planning-boundary',
+    level: 'suggestion',
+    title: 'Fastener quantities are package-planning allowances',
+    message:
+      'Counts follow the modeled reference connections and material schedules, then include a small overage and round to packages. They do not design site anchoring, high-wind uplift connectors, or load-dependent rafter-tie connections; confirm those details and every selected manufacturer’s instructions before building.',
+  })
 
   return items
 }

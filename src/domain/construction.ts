@@ -59,6 +59,16 @@ export interface SurfaceQuantity {
   purchaseNote?: string
 }
 
+export interface ConsumableQuantity {
+  id: string
+  label: string
+  assembly: AssemblyId
+  materialId: MaterialId
+  requiredCount: number
+  overagePct: number
+  note: string
+}
+
 export interface ShoppingListItem {
   id: string
   materialId: MaterialId
@@ -92,6 +102,7 @@ export interface GuidanceItem {
 export interface GeneratedBuilding {
   members: ConstructionMember[]
   surfaces: SurfaceQuantity[]
+  consumables: ConsumableQuantity[]
   shoppingList: ShoppingListItem[]
   breakdown: ConstructionBreakdownItem[]
   guidance: GuidanceItem[]

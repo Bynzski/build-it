@@ -27,7 +27,10 @@ export function MaterialsPanel({ building }: { building: GeneratedBuilding }) {
         <div className="material-section-heading">
           <div>
             <h3>Purchase estimate</h3>
-            <p>Includes {project.wasteFactorPct}% waste on source-panel and coverage quantities.</p>
+            <p>
+              Includes {project.wasteFactorPct}% sheet/coverage waste; fasteners include a planning
+              overage and package rounding.
+            </p>
           </div>
         </div>
         <div className="shopping-list">
@@ -78,7 +81,8 @@ export function MaterialsPanel({ building }: { building: GeneratedBuilding }) {
       </section>
 
       <div className="estimate-disclaimer">
-        Planning estimate only. Confirm quantities, waste, spans, connections, and local
+        Planning estimate only. Site anchors, engineered connectors, and load-specific fastening are
+        not selected. Confirm quantities, spans, connections, manufacturer instructions, and local
         requirements before purchasing or building.
       </div>
     </div>
