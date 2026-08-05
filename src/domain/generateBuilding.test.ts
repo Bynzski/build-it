@@ -183,7 +183,7 @@ describe('construction generator', () => {
     expect(Math.abs(seams[0] - seams[1])).toBeGreaterThanOrEqual(referenceDesign.floor.spacingIn)
   })
 
-  it('lays out 4x8 wall sheets and clips only the panels crossed by openings', () => {
+  it('keeps opening cuts attached to their laid-out 4x8 source sheets', () => {
     const building = generateBuilding(referenceDesign)
     const back = building.members
       .filter((member) => member.label.startsWith('back wall sheathing panel'))
@@ -199,7 +199,59 @@ describe('construction generator', () => {
       back[0].position[0] + back[0].size[0] / 2 + 1 / 8,
     )
     expect(new Set(front.map((member) => member.label)).size).toBe(2)
-    expect(front.length).toBeGreaterThan(2)
+    expect(front).toHaveLength(2)
+    expect(front.every((member) => member.shape === 'cut-panel')).toBe(true)
+    expect(
+      front.every((member) => member.profileRegions?.some((region) => region.outline.length > 4)),
+    ).toBe(true)
+  })
+
+  it('models the reference window as a notch in one source sheet', () => {
+    const building = generateBuilding(referenceDesign)
+    const mainLeftPanels = building.members.filter(
+      (member) => member.label.startsWith('left wall sheathing panel') && member.size[1] > 90,
+    )
+    const cutPanels = mainLeftPanels.filter((member) =>
+      member.profileRegions?.some((region) => region.outline.length > 4 || region.holes.length > 0),
+    )
+
+    expect(mainLeftPanels).toHaveLength(3)
+    expect(cutPanels).toHaveLength(1)
+    expect(cutPanels[0].profileRegions).toHaveLength(1)
+  })
+
+  it('uses an interior profile hole when an opening does not touch a panel edge', () => {
+    const interiorCut = cloneProject(referenceDesign)
+    const window = interiorCut.openings.find((opening) => opening.id === 'left-window')
+    expect(window).toBeDefined()
+    if (!window) return
+    window.centerOffsetIn = 8
+    const building = generateBuilding(interiorCut)
+    const cutPanel = building.members.find(
+      (member) =>
+        member.label.startsWith('left wall sheathing panel') &&
+        member.profileRegions?.some((region) => region.holes.length > 0),
+    )
+
+    expect(cutPanel).toBeDefined()
+    expect(cutPanel?.shape).toBe('cut-panel')
+    expect(cutPanel?.profileRegions?.flatMap((region) => region.holes)).toHaveLength(1)
+  })
+
+  it('tracks laid-out wall source sheets independently from opening area', () => {
+    const building = generateBuilding(referenceDesign)
+    const wallSheathingSheets = building.surfaces
+      .filter((surface) => surface.assembly === 'walls' && surface.materialId === 'osb-7-16')
+      .reduce((count, surface) => count + (surface.sourceSheetCount ?? 0), 0)
+    const wallSidingSheets = building.surfaces
+      .filter((surface) => surface.assembly === 'walls' && surface.materialId === 't1-11-5-8')
+      .reduce((count, surface) => count + (surface.sourceSheetCount ?? 0), 0)
+
+    expect(wallSheathingSheets).toBe(10)
+    expect(wallSidingSheets).toBe(10)
+    expect(building.shoppingList.find((item) => item.materialId === 'osb-7-16')?.note).toContain(
+      '10 laid-out source sheets',
+    )
   })
 
   it('clips gable sheathing from a 4x8 panel grid', () => {
@@ -401,8 +453,12 @@ describe('construction generator', () => {
     const doorHeadY = flashing.find((member) => member.label.startsWith('door'))?.position[1] ?? 0
     const sidingBottom = Math.min(
       ...frontSiding
-        .map((member) => member.position[1] - member.size[1] / 2)
-        .filter((bottom) => bottom > doorHeadY),
+        .flatMap((member) =>
+          (member.profileRegions ?? []).flatMap((region) =>
+            region.outline.map(([, y]) => y + member.position[1]),
+          ),
+        )
+        .filter((height) => height > doorHeadY + 0.01),
     )
 
     expect(flashing).toHaveLength(referenceDesign.openings.length)

@@ -24,6 +24,7 @@ export const constructionRules = {
     standardEightFootStudIn: 92 + 5 / 8,
     precutStudLengthsIn: [92 + 5 / 8, 104 + 5 / 8, 116 + 5 / 8],
     panelEdgeFastenerSetbackIn: 3 / 8,
+    maximumReusableClosureStripIn: 12,
     rimCoverage: 'clearance-limited',
   },
   flashing: {

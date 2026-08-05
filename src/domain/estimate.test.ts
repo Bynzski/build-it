@@ -43,4 +43,36 @@ describe('material estimation', () => {
       expect.objectContaining({ materialId: '2x4', count: 4, purchaseLengthIn: 96 }),
     )
   })
+
+  it('counts laid-out source sheets without crediting opening cutout area', () => {
+    const result = estimateMaterials(
+      [],
+      [
+        {
+          id: 'wall-panels',
+          label: 'Wall panels',
+          assembly: 'walls',
+          materialId: 'osb-7-16',
+          areaSqIn: 0,
+          sourceSheetCount: 2,
+        },
+        {
+          id: 'gable-coverage',
+          label: 'Gable coverage',
+          assembly: 'walls',
+          materialId: 'osb-7-16',
+          areaSqIn: 32 * 144,
+        },
+      ],
+      10,
+    )
+
+    expect(result.shoppingList).toContainEqual(
+      expect.objectContaining({
+        materialId: 'osb-7-16',
+        count: 5,
+        note: '2 laid-out source sheets · 35 sq ft coverage · including 10% waste',
+      }),
+    )
+  })
 })

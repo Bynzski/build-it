@@ -47,8 +47,88 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
     shape.closePath()
     return shape
   }, [member.profile])
+  const cutPanelShapes = useMemo(
+    () =>
+      (member.profileRegions ?? []).map((region) => {
+        const shape = new THREE.Shape()
+        const first = region.outline[0]
+        if (!first) return shape
+        shape.moveTo(first[0], first[1])
+        for (const point of region.outline.slice(1)) shape.lineTo(point[0], point[1])
+        shape.closePath()
+        for (const holePoints of region.holes) {
+          const holeFirst = holePoints[0]
+          if (!holeFirst) continue
+          const hole = new THREE.Path()
+          hole.moveTo(holeFirst[0], holeFirst[1])
+          for (const point of holePoints.slice(1)) hole.lineTo(point[0], point[1])
+          hole.closePath()
+          shape.holes.push(hole)
+        }
+        return shape
+      }),
+    [member.profileRegions],
+  )
 
   if (!assemblyVisible || !presentation.visible) return null
+
+  const handleClick = (event: ThreeEvent<MouseEvent>) => {
+    event.stopPropagation()
+    selectMember(member.id)
+  }
+  const handlePointerOver = (event: ThreeEvent<PointerEvent>) => {
+    event.stopPropagation()
+    setHovered(true)
+    document.body.style.cursor = 'pointer'
+  }
+  const handlePointerOut = () => {
+    setHovered(false)
+    document.body.style.cursor = 'default'
+  }
+  const materialProps = {
+    color: selected ? '#ffbd59' : hovered ? '#efcf9b' : material.color,
+    emissive: selected ? '#6d3a00' : '#000000',
+    emissiveIntensity: selected ? 0.35 : 0,
+    roughness: 0.78,
+    metalness:
+      member.materialId === 'metal-roofing' ||
+      member.materialId === 'z-flashing' ||
+      member.materialId === 'ridge-strap'
+        ? 0.32
+        : 0.02,
+    transparent: isTransparent,
+    opacity,
+    depthWrite: !isTransparent,
+  }
+
+  if (member.shape === 'cut-panel') {
+    const extrusion = member.profileExtrusionIn ?? Math.min(...member.size)
+    return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: React Three Fiber groups are canvas objects, not DOM elements.
+      <group
+        name={member.label}
+        position={member.position}
+        rotation={member.rotation ?? [0, 0, 0]}
+        onClick={handleClick}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        {cutPanelShapes.map((shape, index) => (
+          <mesh
+            // The region order is deterministic for generated panel geometry.
+            // biome-ignore lint/suspicious/noArrayIndexKey: regions do not carry independent identity.
+            key={index}
+            position={[0, 0, -extrusion / 2]}
+            receiveShadow
+          >
+            <extrudeGeometry args={[shape, { depth: extrusion, bevelEnabled: false }]} />
+            <meshStandardMaterial {...materialProps} />
+            <Edges threshold={15} color={isTransparent ? '#806f58' : '#5f4a32'} />
+          </mesh>
+        ))}
+      </group>
+    )
+  }
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: React Three Fiber meshes are canvas objects, not DOM elements.
@@ -58,19 +138,9 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
       rotation={member.rotation ?? [0, 0, 0]}
       castShadow={member.layer === 'framing'}
       receiveShadow
-      onClick={(event) => {
-        event.stopPropagation()
-        selectMember(member.id)
-      }}
-      onPointerOver={(event) => {
-        event.stopPropagation()
-        setHovered(true)
-        document.body.style.cursor = 'pointer'
-      }}
-      onPointerOut={() => {
-        setHovered(false)
-        document.body.style.cursor = 'default'
-      }}
+      onClick={handleClick}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
     >
       {member.shape === 'gable' ? (
         <extrudeGeometry
@@ -85,22 +155,7 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
       ) : (
         <boxGeometry args={member.size} />
       )}
-      <meshStandardMaterial
-        color={selected ? '#ffbd59' : hovered ? '#efcf9b' : material.color}
-        emissive={selected ? '#6d3a00' : '#000000'}
-        emissiveIntensity={selected ? 0.35 : 0}
-        roughness={0.78}
-        metalness={
-          member.materialId === 'metal-roofing' ||
-          member.materialId === 'z-flashing' ||
-          member.materialId === 'ridge-strap'
-            ? 0.32
-            : 0.02
-        }
-        transparent={isTransparent}
-        opacity={opacity}
-        depthWrite={!isTransparent}
-      />
+      <meshStandardMaterial {...materialProps} />
       {isSheetPanel ? <Edges threshold={15} color={isTransparent ? '#806f58' : '#5f4a32'} /> : null}
     </mesh>
   )

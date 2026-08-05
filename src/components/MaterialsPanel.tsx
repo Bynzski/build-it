@@ -27,7 +27,7 @@ export function MaterialsPanel({ building }: { building: GeneratedBuilding }) {
         <div className="material-section-heading">
           <div>
             <h3>Purchase estimate</h3>
-            <p>Includes {project.wasteFactorPct}% waste on coverage materials.</p>
+            <p>Includes {project.wasteFactorPct}% waste on source-panel and coverage quantities.</p>
           </div>
         </div>
         <div className="shopping-list">

@@ -5,6 +5,11 @@ export type MemberLayer = 'framing' | 'sheathing' | 'weather' | 'finish'
 export type Vector3Tuple = [number, number, number]
 export type ProfilePoint = [number, number]
 
+export interface ProfileRegion {
+  outline: ProfilePoint[]
+  holes: ProfilePoint[][]
+}
+
 export interface CutInstruction {
   id: string
   label: string
@@ -30,8 +35,10 @@ export interface ConstructionMember {
   position: Vector3Tuple
   rotation?: Vector3Tuple
   cutLengthIn?: number
-  shape?: 'box' | 'gable' | 'profile'
+  shape?: 'box' | 'gable' | 'profile' | 'cut-panel'
   profile?: ProfilePoint[]
+  profileRegions?: ProfileRegion[]
+  profileExtrusionIn?: number
   fabrication?: FabricationSpec
 }
 
@@ -41,6 +48,7 @@ export interface SurfaceQuantity {
   assembly: AssemblyId
   materialId: MaterialId
   areaSqIn: number
+  sourceSheetCount?: number
 }
 
 export interface ShoppingListItem {

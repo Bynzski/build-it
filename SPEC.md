@@ -69,6 +69,7 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Model the reference gable roof as paired bearing rafters with birdsmouths, a ridge board, low rafter ties, ridge straps, eave subfascia, straight unnotched fly rafters, and slope-cut gable framing.
 - Support the reference rake overhang with on-edge cantilevered outlookers running from the fly rafter across a dropped gable top plate to the first full common rafter; do not treat a decorative ladder assembly as equivalent support.
 - Lay out sheet goods in standard 4×8 panels with explicit joints, staggered floor and roof courses, and opening/slope cuts.
+- Preserve source-sheet identity through door and window cuts: render notched or holed sheets as one selectable panel, show only real inter-sheet seams, and count the source sheet before considering reusable offcuts.
 - Establish studs, joists, and rafters from one outside-edge layout datum so panel end joints remain aligned with framing.
 - Center structural panel end joints over framing; add explicit backing or blocking where openings or horizontal joints interrupt primary framing.
 - Treat framed wall height and exterior-envelope height separately; wall sheathing and siding must close the subfloor edge and overlap the rim rather than stopping at the deck, while maintaining the configured ground clearance.

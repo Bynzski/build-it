@@ -6,6 +6,7 @@ import type {
   GeneratedBuilding,
   MemberLayer,
   ProfilePoint,
+  ProfileRegion,
   SurfaceQuantity,
   Vector3Tuple,
 } from './construction'
@@ -41,8 +42,10 @@ interface AddMemberOptions {
   rotation?: Vector3Tuple
   cutLengthIn?: number
   idHint?: string
-  shape?: 'box' | 'gable' | 'profile'
+  shape?: 'box' | 'gable' | 'profile' | 'cut-panel'
   profile?: ProfilePoint[]
+  profileRegions?: ProfileRegion[]
+  profileExtrusionIn?: number
   fabrication?: FabricationSpec
 }
 
@@ -172,6 +175,8 @@ function addMember(context: GeneratorContext, options: AddMemberOptions): void {
     cutLengthIn: options.cutLengthIn,
     shape: options.shape,
     profile: options.profile,
+    profileRegions: options.profileRegions,
+    profileExtrusionIn: options.profileExtrusionIn,
     fabrication: options.fabrication,
   })
 }
@@ -625,6 +630,8 @@ interface SurfaceCell {
   width: number
   height: number
   panelIndex: number
+  profileRegions?: ProfileRegion[]
+  sourceKind?: 'sheet' | 'offcut'
 }
 
 interface PanelRectangle {
@@ -633,6 +640,114 @@ interface PanelRectangle {
   bottom: number
   top: number
   panelIndex: number
+}
+
+interface GridPoint {
+  x: number
+  y: number
+}
+
+function pointInsidePolygon(point: ProfilePoint, polygon: ProfilePoint[]): boolean {
+  let inside = false
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+    const [x, y] = polygon[index]
+    const [previousX, previousY] = polygon[previous]
+    const crosses =
+      y > point[1] !== previousY > point[1] &&
+      point[0] < ((previousX - x) * (point[1] - y)) / (previousY - y) + x
+    if (crosses) inside = !inside
+  }
+  return inside
+}
+
+function panelCutRegions(rectangle: PanelRectangle, openings: Opening[]): ProfileRegion[] {
+  const cuts = openings
+    .map((opening) => ({
+      left: Math.max(rectangle.left, opening.centerOffsetIn - opening.widthIn / 2),
+      right: Math.min(rectangle.right, opening.centerOffsetIn + opening.widthIn / 2),
+      bottom: Math.max(rectangle.bottom, opening.sillHeightIn),
+      top: Math.min(rectangle.top, opening.sillHeightIn + opening.heightIn),
+    }))
+    .filter((cut) => cut.right - cut.left > 0.01 && cut.top - cut.bottom > 0.01)
+
+  const uniqueSorted = (values: number[]) =>
+    [...new Set(values.map((value) => Math.round(value * 10000) / 10000))].sort(
+      (first, second) => first - second,
+    )
+  const xs = uniqueSorted([
+    rectangle.left,
+    rectangle.right,
+    ...cuts.flatMap((cut) => [cut.left, cut.right]),
+  ])
+  const ys = uniqueSorted([
+    rectangle.bottom,
+    rectangle.top,
+    ...cuts.flatMap((cut) => [cut.bottom, cut.top]),
+  ])
+  const filled = Array.from({ length: ys.length - 1 }, (_, yIndex) =>
+    Array.from({ length: xs.length - 1 }, (_, xIndex) => {
+      const centerX = (xs[xIndex] + xs[xIndex + 1]) / 2
+      const centerY = (ys[yIndex] + ys[yIndex + 1]) / 2
+      return !cuts.some(
+        (cut) =>
+          centerX > cut.left && centerX < cut.right && centerY > cut.bottom && centerY < cut.top,
+      )
+    }),
+  )
+  const isFilled = (x: number, y: number) => filled[y]?.[x] === true
+  const edgeMap = new Map<string, GridPoint[]>()
+  const addEdge = (start: GridPoint, end: GridPoint) => {
+    const key = `${start.x},${start.y}`
+    const edges = edgeMap.get(key)
+    if (edges) edges.push(end)
+    else edgeMap.set(key, [end])
+  }
+
+  for (let y = 0; y < ys.length - 1; y += 1) {
+    for (let x = 0; x < xs.length - 1; x += 1) {
+      if (!isFilled(x, y)) continue
+      if (!isFilled(x, y - 1)) addEdge({ x, y }, { x: x + 1, y })
+      if (!isFilled(x + 1, y)) addEdge({ x: x + 1, y }, { x: x + 1, y: y + 1 })
+      if (!isFilled(x, y + 1)) addEdge({ x: x + 1, y: y + 1 }, { x, y: y + 1 })
+      if (!isFilled(x - 1, y)) addEdge({ x, y: y + 1 }, { x, y })
+    }
+  }
+
+  const loops: ProfilePoint[][] = []
+  while ([...edgeMap.values()].some((edges) => edges.length > 0)) {
+    const startEntry = [...edgeMap.entries()].find(([, edges]) => edges.length > 0)
+    if (!startEntry) break
+    const [startKey] = startEntry
+    const [startX, startY] = startKey.split(',').map(Number)
+    const start = { x: startX, y: startY }
+    const loop: GridPoint[] = [start]
+    let current = start
+
+    for (let guard = 0; guard < edgeMap.size * 4; guard += 1) {
+      const key = `${current.x},${current.y}`
+      const candidates = edgeMap.get(key)
+      const next = candidates?.shift()
+      if (!next) break
+      if (next.x === start.x && next.y === start.y) break
+      loop.push(next)
+      current = next
+    }
+
+    if (loop.length >= 3) loops.push(loop.map((point) => [xs[point.x], ys[point.y]]))
+  }
+
+  const outlines = loops.filter((loop) => signedArea(loop) > 0)
+  const holes = loops.filter((loop) => signedArea(loop) < 0)
+  return outlines.map((outline) => ({
+    outline,
+    holes: holes.filter((hole) => {
+      const center: ProfilePoint = [
+        hole.reduce((sum, point) => sum + point[0], 0) / hole.length,
+        hole.reduce((sum, point) => sum + point[1], 0) / hole.length,
+      ]
+      return pointInsidePolygon(center, outline)
+    }),
+  }))
 }
 
 function subtractOpening(rectangle: PanelRectangle, opening: Opening): PanelRectangle[] {
@@ -693,35 +808,51 @@ function wallSurfaceCells(
     verticalJointGapIn,
     verticalJointPlacement,
   )
-  const rectangles: PanelRectangle[] = []
+  const cells: SurfaceCell[] = []
   let panelIndex = 0
 
-  for (const rawVertical of verticalPanels) {
+  for (const [verticalIndex, rawVertical] of verticalPanels.entries()) {
     for (const horizontal of horizontalPanels) {
       panelIndex += 1
-      let pieces: PanelRectangle[] = [
-        {
-          left: horizontal.start,
-          right: horizontal.end,
-          bottom: rawVertical.start,
-          top: rawVertical.end,
-          panelIndex,
-        },
-      ]
-      for (const opening of openings) {
-        pieces = pieces.flatMap((piece) => subtractOpening(piece, opening))
+      const rectangle = {
+        left: horizontal.start,
+        right: horizontal.end,
+        bottom: rawVertical.start,
+        top: rawVertical.end,
+        panelIndex,
       }
-      rectangles.push(...pieces)
+      const profileRegions = panelCutRegions(rectangle, openings)
+      if (profileRegions.length === 0) continue
+      cells.push({
+        alongCenter: (rectangle.left + rectangle.right) / 2,
+        verticalCenter: (rectangle.bottom + rectangle.top) / 2,
+        width: rectangle.right - rectangle.left,
+        height: rectangle.top - rectangle.bottom,
+        panelIndex,
+        profileRegions: profileRegions.map((region) => ({
+          outline: region.outline.map(([x, y]) => [
+            x - (rectangle.left + rectangle.right) / 2,
+            y - (rectangle.bottom + rectangle.top) / 2,
+          ]),
+          holes: region.holes.map((hole) =>
+            hole.map(([x, y]) => [
+              x - (rectangle.left + rectangle.right) / 2,
+              y - (rectangle.bottom + rectangle.top) / 2,
+            ]),
+          ),
+        })),
+        sourceKind:
+          rawVerticalPanels.length > 1 &&
+          verticalIndex === 0 &&
+          rawVerticalPanels[0].end - rawVerticalPanels[0].start <=
+            constructionRules.walls.maximumReusableClosureStripIn
+            ? 'offcut'
+            : 'sheet',
+      })
     }
   }
 
-  return rectangles.map((rectangle) => ({
-    alongCenter: (rectangle.left + rectangle.right) / 2,
-    verticalCenter: (rectangle.bottom + rectangle.top) / 2,
-    width: rectangle.right - rectangle.left,
-    height: rectangle.top - rectangle.bottom,
-    panelIndex: rectangle.panelIndex,
-  }))
+  return cells
 }
 
 function continuousWallSurfaceCells(
@@ -888,6 +1019,14 @@ function addWallSurfaceLayer(
 ): void {
   for (const cell of cells) {
     const fixedOffset = wall.outward * (studDepth / 2 + distanceFromFraming + thickness / 2)
+    const cutPanelGeometry = cell.profileRegions
+      ? {
+          shape: 'cut-panel' as const,
+          profileRegions: cell.profileRegions,
+          profileExtrusionIn: thickness,
+          rotation: wall.orientation === 'z' ? ([0, -Math.PI / 2, 0] as Vector3Tuple) : undefined,
+        }
+      : {}
     addMember(context, {
       label: `${label} ${layer === 'weather' ? 'section' : 'panel'} ${cell.panelIndex}`,
       assembly: 'walls',
@@ -896,6 +1035,7 @@ function addWallSurfaceLayer(
       size: wallMemberSize(wall, cell.width, cell.height, thickness),
       position: wallVector(wall, cell.alongCenter, wallBaseIn + cell.verticalCenter, fixedOffset),
       idHint: layer === 'finish' ? 'siding' : layer === 'weather' ? 'wall-wrb' : 'wall-sheathing',
+      ...cutPanelGeometry,
     })
   }
 }
@@ -1106,6 +1246,7 @@ function addWall(
       assembly: 'walls',
       materialId: project.walls.sheathingMaterialId,
       areaSqIn: Math.max(0, sheathingSpan * envelopeHeight - openingArea),
+      sourceSheetCount: sheathingCells.filter((cell) => cell.sourceKind === 'sheet').length,
     },
     {
       id: `${wall.id}-siding-area`,
@@ -1113,6 +1254,7 @@ function addWall(
       assembly: 'walls',
       materialId: project.walls.sidingMaterialId,
       areaSqIn: Math.max(0, sidingSpan * envelopeHeight - openingArea),
+      sourceSheetCount: sidingCells.filter((cell) => cell.sourceKind === 'sheet').length,
     },
   )
   if (cladding.requiresWeatherBarrier) {

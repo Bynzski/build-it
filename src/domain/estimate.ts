@@ -19,6 +19,11 @@ interface CutGroup {
   note?: string
 }
 
+interface SurfacePurchaseGroup {
+  coverageAreaSqIn: number
+  sourceSheetCount: number
+}
+
 function packedStockCount(cutsIn: number[], stockLengthIn: number): number {
   const sawKerfIn = 1 / 8
   const remainingByBoard: number[] = []
@@ -88,12 +93,18 @@ export function estimateMaterials(
     })
   }
 
-  const surfaceGroups = new Map<MaterialId, number>()
+  const surfaceGroups = new Map<MaterialId, SurfacePurchaseGroup>()
   for (const surface of surfaces) {
-    surfaceGroups.set(
-      surface.materialId,
-      (surfaceGroups.get(surface.materialId) ?? 0) + surface.areaSqIn,
-    )
+    const surfaceGroup = surfaceGroups.get(surface.materialId) ?? {
+      coverageAreaSqIn: 0,
+      sourceSheetCount: 0,
+    }
+    if (surface.sourceSheetCount !== undefined) {
+      surfaceGroup.sourceSheetCount += surface.sourceSheetCount
+    } else {
+      surfaceGroup.coverageAreaSqIn += surface.areaSqIn
+    }
+    surfaceGroups.set(surface.materialId, surfaceGroup)
 
     const key = `${surface.assembly}:${surface.materialId}`
     const current = breakdownGroups.get(key)
@@ -110,17 +121,28 @@ export function estimateMaterials(
   }
 
   const surfaceItems: ShoppingListItem[] = []
-  for (const [materialId, areaSqIn] of surfaceGroups) {
+  for (const [materialId, group] of surfaceGroups) {
     const material = getMaterial(materialId)
     const coverage = material.coverageSqFt ?? 1
-    const adjustedArea = squareInchesToSquareFeet(areaSqIn) * (1 + wasteFactorPct / 100)
+    const wasteMultiplier = 1 + wasteFactorPct / 100
+    const adjustedArea = squareInchesToSquareFeet(group.coverageAreaSqIn) * wasteMultiplier
+    const sourceSheetPurchaseCount = Math.ceil(group.sourceSheetCount * wasteMultiplier)
+    const coveragePurchaseCount = Math.ceil(adjustedArea / coverage)
+    const noteParts: string[] = []
+    if (group.sourceSheetCount > 0) {
+      noteParts.push(`${group.sourceSheetCount} laid-out source sheets`)
+    }
+    if (group.coverageAreaSqIn > 0) {
+      noteParts.push(`${Math.round(adjustedArea)} sq ft coverage`)
+    }
+    noteParts.push(`including ${wasteFactorPct}% waste`)
     surfaceItems.push({
       id: `${materialId}:coverage`,
       materialId,
       label: material.name,
-      count: Math.ceil(adjustedArea / coverage),
+      count: sourceSheetPurchaseCount + coveragePurchaseCount,
       unit: material.unit,
-      note: `${Math.round(adjustedArea)} sq ft including ${wasteFactorPct}% waste`,
+      note: noteParts.join(' · '),
     })
   }
 
