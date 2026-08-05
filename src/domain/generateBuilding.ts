@@ -2,6 +2,7 @@ import type { BuildItProject, Opening, WallId } from '../model/project'
 import type {
   AssemblyId,
   ConstructionMember,
+  ConstructionRole,
   FabricationSpec,
   GeneratedBuilding,
   MemberLayer,
@@ -42,6 +43,10 @@ interface AddMemberOptions {
   label: string
   assembly: AssemblyId
   layer: MemberLayer
+  role?: ConstructionRole
+  scopeId?: string
+  scopeLabel?: string
+  kind?: string
   materialId: MaterialId
   size: Vector3Tuple
   position: Vector3Tuple
@@ -54,6 +59,33 @@ interface AddMemberOptions {
   profileExtrusionIn?: number
   ribbedPanel?: ConstructionMember['ribbedPanel']
   fabrication?: FabricationSpec
+}
+
+const assemblyLabels: Record<AssemblyId, string> = {
+  foundation: 'Foundation',
+  floor: 'Floor',
+  walls: 'Exterior walls',
+  roof: 'Roof',
+}
+
+function defaultRole(layer: MemberLayer): ConstructionRole {
+  if (layer === 'framing') return 'structure'
+  if (layer === 'sheathing') return 'sheathing'
+  if (layer === 'weather') return 'weatherproofing'
+  return 'exterior-finish'
+}
+
+function wallScope(wallId: WallId): { scopeId: string; scopeLabel: string } {
+  return {
+    scopeId: `walls:${wallId}`,
+    scopeLabel: `${wallId[0].toUpperCase()}${wallId.slice(1)} wall`,
+  }
+}
+
+function roofSlopeScope(side: -1 | 1): { scopeId: string; scopeLabel: string } {
+  return side === -1
+    ? { scopeId: 'roof:left', scopeLabel: 'Left roof slope' }
+    : { scopeId: 'roof:right', scopeLabel: 'Right roof slope' }
 }
 
 const SUBFLOOR_THICKNESS = constructionRules.layers.subfloorThicknessIn
@@ -190,6 +222,10 @@ function addMember(context: GeneratorContext, options: AddMemberOptions): void {
     label: options.label,
     assembly: options.assembly,
     layer: options.layer,
+    role: options.role ?? defaultRole(options.layer),
+    scopeId: options.scopeId ?? options.assembly,
+    scopeLabel: options.scopeLabel ?? assemblyLabels[options.assembly],
+    kind: options.kind ?? options.idHint ?? options.assembly,
     materialId: options.materialId,
     size: options.size,
     position: options.position,
@@ -396,6 +432,7 @@ function addVerticalWallMember(
     label,
     assembly: 'walls',
     layer: 'framing',
+    ...wallScope(wall.id),
     materialId,
     size: wallMemberSize(wall, 1.5, length, depth),
     position: wallVector(wall, along, baseY + length / 2, fixedOffset),
@@ -422,6 +459,7 @@ function addHorizontalWallMember(
     label,
     assembly: 'walls',
     layer: 'framing',
+    ...wallScope(wall.id),
     materialId,
     size: wallMemberSize(wall, length, memberHeight, depth),
     position: wallVector(wall, alongCenter, centerY, fixedOffset),
@@ -947,6 +985,8 @@ function addWallJointFlashing(
         label: `${wall.id} wall horizontal Z-flashing`,
         assembly: 'walls',
         layer: 'weather',
+        role: 'trim-flashing',
+        ...wallScope(wall.id),
         materialId: flashingMaterial,
         size: wallMemberSize(wall, segment.end - segment.start, visibleHeight, projection),
         position: wallVector(
@@ -996,6 +1036,8 @@ function addOpeningHeadFlashing(
       label: `${opening.type} head Z-flashing`,
       assembly: 'walls',
       layer: 'weather',
+      role: 'trim-flashing',
+      ...wallScope(wall.id),
       materialId: 'z-flashing',
       size: wallMemberSize(wall, end - start, visibleHeight, projection),
       position: wallVector(
@@ -1054,6 +1096,7 @@ function addWallSurfaceLayer(
       label: `${label} ${layer === 'weather' ? 'section' : 'panel'} ${cell.panelIndex}`,
       assembly: 'walls',
       layer,
+      ...wallScope(wall.id),
       materialId,
       size: wallMemberSize(wall, cell.width, cell.height, thickness),
       position: wallVector(wall, cell.alongCenter, wallBaseIn + cell.verticalCenter, fixedOffset),
@@ -1337,6 +1380,9 @@ function addExteriorCornerTrim(
         label: `${endLabel} ${sideLabel} corner trim`,
         assembly: 'walls',
         layer: 'finish',
+        role: 'trim-flashing',
+        scopeId: 'walls',
+        scopeLabel: 'Shared wall details',
         materialId: trimMaterial,
         size: [trimWidth, trimHeight, trimThickness],
         position: [
@@ -1351,6 +1397,9 @@ function addExteriorCornerTrim(
         label: `${sideLabel} ${endLabel} corner trim`,
         assembly: 'walls',
         layer: 'finish',
+        role: 'trim-flashing',
+        scopeId: 'walls',
+        scopeLabel: 'Shared wall details',
         materialId: trimMaterial,
         size: [trimThickness, trimHeight, trimWidth],
         position: [
@@ -1375,6 +1424,8 @@ function addGableSurfaceLayer(
     thickness: number
     materialId: MaterialId
     layer: 'sheathing' | 'weather' | 'finish'
+    scopeId: string
+    scopeLabel: string
     label: string
     idHint: string
     supportCentersIn: number[]
@@ -1422,6 +1473,8 @@ function addGableSurfaceLayer(
         label: `${options.label} ${options.layer === 'weather' ? 'section' : 'panel'} ${panelIndex}`,
         assembly: 'walls',
         layer: options.layer,
+        scopeId: options.scopeId,
+        scopeLabel: options.scopeLabel,
         materialId: options.materialId,
         ...profileGeometry(
           panel.map(([x, y]) => [x, options.baseY + y]),
@@ -1463,6 +1516,8 @@ function addGableJointFlashing(
       label: `${wall.id} gable horizontal Z-flashing`,
       assembly: 'walls',
       layer: 'weather',
+      role: 'trim-flashing',
+      ...wallScope(wall.id),
       materialId: 'z-flashing',
       size: [span, visibleHeight, projection],
       position: [0, baseY + height, fixedIn],
@@ -1539,6 +1594,7 @@ function addGableEndFraming(
         label: `${wall.id} gable stud`,
         assembly: 'walls',
         layer: 'framing',
+        ...wallScope(wall.id),
         materialId: studMaterial,
         ...geometry,
         cutLengthIn: longPointLength,
@@ -1578,6 +1634,7 @@ function addGableEndFraming(
         label: `${wall.id} ${side === -1 ? 'left' : 'right'} dropped gable top plate`,
         assembly: 'walls',
         layer: 'framing',
+        ...wallScope(wall.id),
         materialId: studMaterial,
         ...profileGeometry(
           [
@@ -1624,6 +1681,7 @@ function addGableEndFraming(
           label: `${wall.id} gable sheathing joint blocking`,
           assembly: 'walls',
           layer: 'framing',
+          ...wallScope(wall.id),
           materialId: studMaterial,
           size: [end - start, PLATE_THICKNESS, studDepth],
           position: [(start + end) / 2, baseY + height, wall.fixedIn],
@@ -1641,6 +1699,7 @@ function addGableEndFraming(
       thickness: WALL_SHEATHING_THICKNESS,
       materialId: project.walls.sheathingMaterialId,
       layer: 'sheathing',
+      ...wallScope(wall.id),
       label: `${wall.id} gable sheathing`,
       idHint: 'gable-sheathing',
       supportCentersIn: gableLayoutPositions,
@@ -1656,6 +1715,7 @@ function addGableEndFraming(
         thickness: weatherBarrierThickness,
         materialId: project.walls.weatherBarrierMaterialId,
         layer: 'weather',
+        ...wallScope(wall.id),
         label: `${wall.id} gable WRB`,
         idHint: 'gable-wrb',
         supportCentersIn: gableLayoutPositions,
@@ -1678,6 +1738,7 @@ function addGableEndFraming(
       thickness: cladding.thicknessIn,
       materialId: project.walls.sidingMaterialId,
       layer: 'finish',
+      ...wallScope(wall.id),
       label: `${wall.id} gable siding`,
       idHint: 'gable-siding',
       supportCentersIn: gableLayoutPositions,
@@ -1923,6 +1984,7 @@ function addRoof(
         label: `${side === -1 ? 'Left' : 'Right'} common rafter`,
         assembly: 'roof',
         layer: 'framing',
+        ...roofSlopeScope(side),
         materialId: rafterMaterial,
         ...bearingRafterGeometry(side, z),
         cutLengthIn: rafterLongPointLength,
@@ -1973,6 +2035,7 @@ function addRoof(
           label: `${end === 1 ? 'Front' : 'Back'} ${side === -1 ? 'left' : 'right'} fly rafter`,
           assembly: 'roof',
           layer: 'framing',
+          ...roofSlopeScope(side),
           materialId: rafterMaterial,
           ...flyRafterGeometry(side, end * flyRafterOffset),
           cutLengthIn: rafterLongPointLength,
@@ -1988,6 +2051,7 @@ function addRoof(
             label: `${end === 1 ? 'Front' : 'Back'} rake lookout`,
             assembly: 'roof',
             layer: 'framing',
+            ...roofSlopeScope(side),
             materialId: '2x4',
             size: [PLATE_THICKNESS, constructionRules.roof.outlookerDepthIn, outlookerLength],
             position: [
@@ -2016,6 +2080,7 @@ function addRoof(
       label: `${side === -1 ? 'Left' : 'Right'} eave subfascia`,
       assembly: 'roof',
       layer: 'framing',
+      ...roofSlopeScope(side),
       materialId: rafterMaterial,
       size: [rafterThickness, rafterDepth, roofLength],
       position: [
@@ -2122,6 +2187,7 @@ function addRoof(
           label: `${side === -1 ? 'Left' : 'Right'} roof sheathing joint blocking`,
           assembly: 'roof',
           layer: 'framing',
+          ...roofSlopeScope(side),
           materialId: '2x4',
           size: [3.5, PLATE_THICKNESS, clearLength],
           position: [
@@ -2163,6 +2229,7 @@ function addRoof(
           label: `${side === -1 ? 'Left' : 'Right'} roof sheathing panel ${sheathingPanel}`,
           assembly: 'roof',
           layer: 'sheathing',
+          ...roofSlopeScope(side),
           materialId: project.roof.sheathingMaterialId,
           size: [slope.end - slope.start, WALL_SHEATHING_THICKNESS, length.end - length.start],
           position: [
@@ -2180,6 +2247,7 @@ function addRoof(
       label: `${side === -1 ? 'Left' : 'Right'} roof underlayment`,
       assembly: 'roof',
       layer: 'weather',
+      ...roofSlopeScope(side),
       materialId: 'synthetic-roof-underlayment',
       size: [roofSlopeLength, WEATHER_BARRIER_THICKNESS, roofLength],
       position: [
@@ -2198,6 +2266,7 @@ function addRoof(
         label: `${side === -1 ? 'Left' : 'Right'} metal roof panel ${panelIndex + 1}`,
         assembly: 'roof',
         layer: 'finish',
+        ...roofSlopeScope(side),
         materialId: project.roof.roofingMaterialId,
         size: [roofPanelLength, roofCladding.visualBaseThicknessIn, panel.end - panel.start],
         position: [
@@ -2230,6 +2299,8 @@ function addRoof(
       label: `${side === -1 ? 'Left' : 'Right'} profiled eave closure`,
       assembly: 'roof',
       layer: 'finish',
+      role: 'trim-flashing',
+      ...roofSlopeScope(side),
       materialId: 'metal-eave-closure',
       size: [1, roofCladding.majorRibHeightIn, roofLength],
       position: [
@@ -2248,6 +2319,8 @@ function addRoof(
       label: `${side === -1 ? 'Left' : 'Right'} profiled solid ridge closure`,
       assembly: 'roof',
       layer: 'finish',
+      role: 'trim-flashing',
+      ...roofSlopeScope(side),
       materialId: 'metal-ridge-closure',
       size: [2, roofCladding.majorRibHeightIn, roofLength],
       position: [
@@ -2265,6 +2338,8 @@ function addRoof(
       label: `${side === -1 ? 'Left' : 'Right'} eave/drip trim`,
       assembly: 'roof',
       layer: 'finish',
+      role: 'trim-flashing',
+      ...roofSlopeScope(side),
       materialId: 'metal-eave-trim',
       ...profileGeometry(
         (() => {
@@ -2296,6 +2371,8 @@ function addRoof(
         label: `${end === 1 ? 'Front' : 'Back'} ${side === -1 ? 'left' : 'right'} rake trim`,
         assembly: 'roof',
         layer: 'finish',
+        role: 'trim-flashing',
+        ...roofSlopeScope(side),
         materialId: 'metal-rake-trim',
         size: [roofPanelLength, 1 / 8, 2.5],
         position: [
@@ -2323,6 +2400,7 @@ function addRoof(
     label: 'Solid metal ridge cap',
     assembly: 'roof',
     layer: 'finish',
+    role: 'trim-flashing',
     materialId: 'metal-ridge-cap',
     ...profileGeometry(
       [

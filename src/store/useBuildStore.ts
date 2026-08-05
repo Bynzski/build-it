@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { AssemblyId, ConstructionRole } from '../domain/construction'
 import {
   type BuildItProject,
   cloneProject,
@@ -6,16 +7,9 @@ import {
   parseProject,
   referenceDesign,
 } from '../model/project'
-import type { ViewMode } from '../scene/viewMode'
+import type { DisplayState, ViewPresetId, VisibilityIsolation } from '../scene/viewMode'
 
-export type { ViewMode } from '../scene/viewMode'
-
-export interface LayerVisibility {
-  foundation: boolean
-  floor: boolean
-  walls: boolean
-  roof: boolean
-}
+export type { DisplayState, ViewPresetId, VisibilityIsolation } from '../scene/viewMode'
 
 interface BuildItStore {
   project: BuildItProject
@@ -23,8 +17,14 @@ interface BuildItStore {
   future: BuildItProject[]
   selectedMemberId: string | null
   selectedOpeningId: string | null
-  viewMode: ViewMode
-  layerVisibility: LayerVisibility
+  viewPreset: ViewPresetId
+  assemblyOverrides: Partial<Record<AssemblyId, DisplayState>>
+  roleOverrides: Partial<Record<ConstructionRole, DisplayState>>
+  scopeOverrides: Record<string, DisplayState>
+  scopeRoleOverrides: Record<string, DisplayState>
+  memberOverrides: Record<string, DisplayState>
+  visibilityIsolation: VisibilityIsolation | null
+  revealHidden: boolean
   commitProject: (project: BuildItProject) => void
   replaceProject: (project: BuildItProject) => void
   previewDimension: (field: keyof BuildItProject['dimensions'], value: number) => void
@@ -41,14 +41,35 @@ interface BuildItStore {
   removeOpening: (id: string) => void
   selectMember: (id: string | null) => void
   selectOpening: (id: string | null) => void
-  setViewMode: (mode: ViewMode) => void
-  toggleLayer: (layer: keyof LayerVisibility) => void
+  setViewPreset: (preset: ViewPresetId) => void
+  setAssemblyDisplay: (assembly: AssemblyId, state: DisplayState | null) => void
+  setRoleDisplay: (role: ConstructionRole, state: DisplayState | null) => void
+  setScopeDisplay: (scopeId: string, state: DisplayState | null) => void
+  setScopeRoleDisplay: (scopeId: string, role: ConstructionRole, state: DisplayState | null) => void
+  setMemberDisplay: (memberId: string, state: DisplayState | null) => void
+  isolateVisibility: (isolation: VisibilityIsolation | null) => void
+  resetVisibility: () => void
+  showAll: () => void
+  toggleRevealHidden: () => void
   undo: () => void
   redo: () => void
   reset: () => void
 }
 
 const MAX_HISTORY = 60
+
+function clearedVisibility(preset: ViewPresetId) {
+  return {
+    viewPreset: preset,
+    assemblyOverrides: {},
+    roleOverrides: {},
+    scopeOverrides: {},
+    scopeRoleOverrides: {},
+    memberOverrides: {},
+    visibilityIsolation: null,
+    revealHidden: false,
+  }
+}
 
 function sameProject(first: BuildItProject, second: BuildItProject): boolean {
   return JSON.stringify(first) === JSON.stringify(second)
@@ -67,6 +88,10 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
       project: next,
       past: [...state.past, cloneProject(previous)].slice(-MAX_HISTORY),
       future: [],
+      selectedMemberId: null,
+      memberOverrides: {},
+      visibilityIsolation:
+        state.visibilityIsolation?.type === 'member' ? null : state.visibilityIsolation,
     }))
   }
 
@@ -82,13 +107,7 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
     future: [],
     selectedMemberId: null,
     selectedOpeningId: null,
-    viewMode: 'xray',
-    layerVisibility: {
-      foundation: true,
-      floor: true,
-      walls: true,
-      roof: true,
-    },
+    ...clearedVisibility('xray'),
     commitProject: commit,
     replaceProject: (project) =>
       set({
@@ -97,6 +116,7 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
         future: [],
         selectedMemberId: null,
         selectedOpeningId: null,
+        ...clearedVisibility('xray'),
       }),
     previewDimension: (field, value) =>
       set((state) => ({
@@ -104,6 +124,10 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
           ...state.project,
           dimensions: { ...state.project.dimensions, [field]: value },
         },
+        selectedMemberId: null,
+        memberOverrides: {},
+        visibilityIsolation:
+          state.visibilityIsolation?.type === 'member' ? null : state.visibilityIsolation,
       })),
     commitPreview: (original) => {
       const current = get().project
@@ -169,16 +193,74 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
     },
     selectMember: (id) => set({ selectedMemberId: id, selectedOpeningId: null }),
     selectOpening: (id) => set({ selectedOpeningId: id, selectedMemberId: null }),
-    setViewMode: (viewMode) => set({ viewMode, selectedMemberId: null }),
-    toggleLayer: (layer) =>
-      set((state) => ({
-        layerVisibility: {
-          ...state.layerVisibility,
-          [layer]: !state.layerVisibility[layer],
-        },
-      })),
+    setViewPreset: (viewPreset) =>
+      set({ ...clearedVisibility(viewPreset), selectedMemberId: null }),
+    setAssemblyDisplay: (assembly, displayState) =>
+      set((state) => {
+        const assemblyOverrides = { ...state.assemblyOverrides }
+        if (displayState) assemblyOverrides[assembly] = displayState
+        else delete assemblyOverrides[assembly]
+        const scopeOverrides = Object.fromEntries(
+          Object.entries(state.scopeOverrides).filter(
+            ([scopeId]) => scopeId !== assembly && !scopeId.startsWith(`${assembly}:`),
+          ),
+        )
+        const scopeRoleOverrides = Object.fromEntries(
+          Object.entries(state.scopeRoleOverrides).filter(
+            ([key]) => !key.startsWith(`${assembly}|`) && !key.startsWith(`${assembly}:`),
+          ),
+        )
+        return {
+          assemblyOverrides,
+          scopeOverrides,
+          scopeRoleOverrides,
+          revealHidden: false,
+        }
+      }),
+    setRoleDisplay: (role, displayState) =>
+      set((state) => {
+        const roleOverrides = { ...state.roleOverrides }
+        if (displayState) roleOverrides[role] = displayState
+        else delete roleOverrides[role]
+        const scopeRoleOverrides = Object.fromEntries(
+          Object.entries(state.scopeRoleOverrides).filter(([key]) => !key.endsWith(`|${role}`)),
+        )
+        return { roleOverrides, scopeRoleOverrides, revealHidden: false }
+      }),
+    setScopeDisplay: (scopeId, displayState) =>
+      set((state) => {
+        const scopeOverrides = { ...state.scopeOverrides }
+        if (displayState) scopeOverrides[scopeId] = displayState
+        else delete scopeOverrides[scopeId]
+        const scopeRoleOverrides = Object.fromEntries(
+          Object.entries(state.scopeRoleOverrides).filter(
+            ([key]) => !key.startsWith(`${scopeId}|`),
+          ),
+        )
+        return { scopeOverrides, scopeRoleOverrides, revealHidden: false }
+      }),
+    setScopeRoleDisplay: (scopeId, role, displayState) =>
+      set((state) => {
+        const key = `${scopeId}|${role}`
+        const scopeRoleOverrides = { ...state.scopeRoleOverrides }
+        if (displayState) scopeRoleOverrides[key] = displayState
+        else delete scopeRoleOverrides[key]
+        return { scopeRoleOverrides, revealHidden: false }
+      }),
+    setMemberDisplay: (memberId, displayState) =>
+      set((state) => {
+        const memberOverrides = { ...state.memberOverrides }
+        if (displayState) memberOverrides[memberId] = displayState
+        else delete memberOverrides[memberId]
+        return { memberOverrides, revealHidden: false }
+      }),
+    isolateVisibility: (visibilityIsolation) => set({ visibilityIsolation, revealHidden: false }),
+    resetVisibility: () =>
+      set((state) => ({ ...clearedVisibility(state.viewPreset), selectedMemberId: null })),
+    showAll: () => set({ ...clearedVisibility('complete'), selectedMemberId: null }),
+    toggleRevealHidden: () => set((state) => ({ revealHidden: !state.revealHidden })),
     undo: () => {
-      const { past, project, future } = get()
+      const { past, project, future, visibilityIsolation } = get()
       const previous = past.at(-1)
       if (!previous) return
       set({
@@ -186,10 +268,12 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
         past: past.slice(0, -1),
         future: [cloneProject(project), ...future].slice(0, MAX_HISTORY),
         selectedMemberId: null,
+        memberOverrides: {},
+        visibilityIsolation: visibilityIsolation?.type === 'member' ? null : visibilityIsolation,
       })
     },
     redo: () => {
-      const { past, project, future } = get()
+      const { past, project, future, visibilityIsolation } = get()
       const next = future[0]
       if (!next) return
       set({
@@ -197,6 +281,8 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
         past: [...past, cloneProject(project)].slice(-MAX_HISTORY),
         future: future.slice(1),
         selectedMemberId: null,
+        memberOverrides: {},
+        visibilityIsolation: visibilityIsolation?.type === 'member' ? null : visibilityIsolation,
       })
     },
     reset: () =>
@@ -206,6 +292,7 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
         future: [],
         selectedMemberId: null,
         selectedOpeningId: null,
+        ...clearedVisibility('xray'),
       }),
   }
 })

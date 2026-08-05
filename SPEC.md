@@ -44,7 +44,11 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 
 - Update the model immediately when design values change.
 - Show the main construction layers and framing in a simplified form.
-- Provide distinct framing, sheathing, weather-barrier, finished-exterior, and combined X-ray inspection views.
+- Provide Complete, framing, sheathing, weatherproofing, finished-exterior, and combined X-ray inspection presets. Contextual presets may ghost supporting layers instead of removing useful construction relationships.
+- Classify generated parts independently by building system, assembly scope, construction role, and component kind so visibility does not depend on labels or generated IDs.
+- Provide a model-visibility browser that can show, ghost, hide, or isolate construction roles, systems, individual wall and roof scopes, and selected members.
+- Keep viewport visibility independent from design inclusion and material estimation; hiding a part never removes it from the building or purchase estimate.
+- Provide Show all, Reset preset, and temporary Reveal hidden actions so custom inspection states are recoverable.
 - Let the user fit the camera to the current building without changing the design.
 - Prevent invalid geometry, such as openings outside a wall.
 - Use inches internally and display dimensions clearly as feet and inches.
@@ -59,6 +63,7 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Prefer guidance and warnings over silently changing the design.
 - Keep drag controls and exact dimension fields synchronized.
 - Support undo and redo for design changes.
+- Treat visibility changes as temporary editor state rather than construction edits or undoable project changes.
 
 ### Construction System
 
@@ -110,6 +115,7 @@ Guidance has three levels:
 - Support open, save, save-as, import, and export workflows where the browser permits.
 - Use browser storage only for autosave and recovery, not as the permanent source of truth.
 - Do not store generated meshes or calculated material totals in project files.
+- Keep transient visibility overrides out of project files. Future named views may store semantic filters, camera state, and section state without storing generated member IDs.
 
 ### Materials
 
@@ -167,6 +173,7 @@ Project inputs
 - Multi-user collaboration or cloud accounts.
 - Automated pricing, ordering, or contractor workflows.
 - Free-form or curved building footprints.
+- Multiple simultaneous viewports, named view sets, and movable section planes in the initial visibility-browser slice.
 
 ## 6. Success Criteria
 

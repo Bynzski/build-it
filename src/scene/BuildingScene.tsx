@@ -9,7 +9,7 @@ import { type BuildItProject, cloneProject, type Opening } from '../model/projec
 import { useBuildStore } from '../store/useBuildStore'
 import { cameraFitForBuilding } from './cameraFit'
 import { projectWorldAxisToScreen, type ScreenDragState, updateScreenDrag } from './dimensionDrag'
-import { memberPresentation } from './viewMode'
+import { resolveMemberPresentation } from './viewMode'
 
 interface BuildingSceneProps {
   building: GeneratedBuilding
@@ -19,13 +19,27 @@ interface BuildingSceneProps {
 function MemberMesh({ member }: { member: ConstructionMember }) {
   const selectedMemberId = useBuildStore((state) => state.selectedMemberId)
   const selectMember = useBuildStore((state) => state.selectMember)
-  const viewMode = useBuildStore((state) => state.viewMode)
-  const layerVisibility = useBuildStore((state) => state.layerVisibility)
+  const viewPreset = useBuildStore((state) => state.viewPreset)
+  const assemblyOverrides = useBuildStore((state) => state.assemblyOverrides)
+  const roleOverrides = useBuildStore((state) => state.roleOverrides)
+  const scopeOverrides = useBuildStore((state) => state.scopeOverrides)
+  const scopeRoleOverrides = useBuildStore((state) => state.scopeRoleOverrides)
+  const memberOverrides = useBuildStore((state) => state.memberOverrides)
+  const isolation = useBuildStore((state) => state.visibilityIsolation)
+  const revealHidden = useBuildStore((state) => state.revealHidden)
   const [hovered, setHovered] = useState(false)
   const material = getMaterial(member.materialId)
   const selected = selectedMemberId === member.id
-  const assemblyVisible = layerVisibility[member.assembly === 'walls' ? 'walls' : member.assembly]
-  const presentation = memberPresentation(viewMode, member.layer)
+  const presentation = resolveMemberPresentation(member, {
+    viewPreset,
+    assemblyOverrides,
+    roleOverrides,
+    scopeOverrides,
+    scopeRoleOverrides,
+    memberOverrides,
+    isolation,
+    revealHidden,
+  })
   const isTransparent = presentation.transparent
   const opacity = presentation.opacity
   const isSheetPanel = member.label.includes(' panel ')
@@ -83,7 +97,7 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
     return offsets
   }, [member.ribbedPanel, member.size])
 
-  if (!assemblyVisible || !presentation.visible) return null
+  if (!presentation.visible) return null
 
   const handleClick = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation()
@@ -99,7 +113,13 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
     document.body.style.cursor = 'default'
   }
   const materialProps = {
-    color: selected ? '#ffbd59' : hovered ? '#efcf9b' : material.color,
+    color: selected
+      ? '#ffbd59'
+      : presentation.revealed
+        ? '#d56b92'
+        : hovered
+          ? '#efcf9b'
+          : material.color,
     emissive: selected ? '#6d3a00' : '#000000',
     emissiveIntensity: selected ? 0.35 : 0,
     roughness: 0.78,
@@ -175,7 +195,7 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
       name={member.label}
       position={member.position}
       rotation={member.rotation ?? [0, 0, 0]}
-      castShadow={member.layer === 'framing'}
+      castShadow={member.role === 'structure' && !isTransparent}
       receiveShadow
       onClick={handleClick}
       onPointerOver={handlePointerOver}

@@ -324,8 +324,19 @@ select:focus-visible {
   background: #3a6f65;
 }
 
+.layer-control button.is-ghosted {
+  color: #526c70;
+  background: #eef3f1;
+}
+
+.layer-control button.is-ghosted span {
+  border-color: #68837f;
+  background: linear-gradient(90deg, #68837f 50%, transparent 50%);
+}
+
 .fit-view-button,
-.reset-button {
+.reset-button,
+.layers-button {
   padding: 9px 12px;
   border-radius: 9px;
   color: #6e7c7e;
@@ -336,8 +347,233 @@ select:focus-visible {
   backdrop-filter: blur(10px);
 }
 
+.layers-button.is-active {
+  color: #f7fbf9;
+  background: #294f49;
+}
+
 .fit-view-button {
   margin-left: auto;
+}
+
+.layer-browser {
+  position: absolute;
+  z-index: 14;
+  top: 66px;
+  left: 18px;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  width: min(360px, calc(100% - 36px));
+  max-height: calc(100% - 100px);
+  border: 1px solid rgba(62, 88, 89, 0.2);
+  border-radius: 12px;
+  background: rgba(249, 251, 249, 0.97);
+  box-shadow: 0 16px 42px rgba(31, 52, 54, 0.2);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+.layer-browser-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 15px 16px 11px;
+}
+
+.layer-browser-header h2,
+.layer-browser-header p {
+  margin: 0;
+}
+
+.layer-browser-header h2 {
+  margin-top: 3px;
+  color: #2f484b;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 15px;
+}
+
+.layer-browser-header > button {
+  width: 27px;
+  height: 27px;
+  border-radius: 6px;
+  color: #708184;
+  background: transparent;
+  font-size: 17px;
+}
+
+.layer-browser-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 0 12px 11px;
+  border-bottom: 1px solid #e1e7e5;
+}
+
+.layer-browser-actions button,
+.isolation-banner button {
+  padding: 7px 6px;
+  border: 1px solid #d7dfdd;
+  border-radius: 6px;
+  color: #587073;
+  background: #fff;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.layer-browser-actions button.is-active {
+  border-color: #bf7890;
+  color: #8b3f5b;
+  background: #f8e9ee;
+}
+
+.isolation-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 13px;
+  color: #694b28;
+  background: #f7ecd9;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.isolation-banner button {
+  border-color: #dfc8a8;
+  color: #775733;
+  background: #fffaf1;
+}
+
+.layer-browser-scroll {
+  min-height: 0;
+  padding: 4px 12px 18px;
+  overflow-y: auto;
+}
+
+.visibility-section {
+  padding-top: 13px;
+}
+
+.visibility-section + .visibility-section {
+  margin-top: 8px;
+  border-top: 1px solid #e2e7e5;
+}
+
+.visibility-section > h3 {
+  margin: 0 0 7px;
+  color: #809092;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.visibility-rows,
+.visibility-tree,
+.visibility-branches {
+  display: grid;
+  gap: 4px;
+}
+
+.visibility-row,
+.visibility-tree summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 6px 5px 9px;
+  border-radius: 7px;
+  color: #405558;
+  background: #f2f6f4;
+}
+
+.visibility-tree summary {
+  cursor: pointer;
+  list-style-position: outside;
+}
+
+.visibility-tree details[open] > summary {
+  background: #eaf1ee;
+}
+
+.visibility-row > span:first-child,
+.visibility-tree summary > span:first-of-type {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.visibility-row strong,
+.visibility-tree summary strong {
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.visibility-row small,
+.visibility-tree summary small {
+  color: #899799;
+  font-size: 7px;
+}
+
+.visibility-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.visibility-controls button {
+  width: 25px;
+  height: 25px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #6d7f81;
+  background: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+}
+
+.visibility-controls .state-visible {
+  color: #2f6d61;
+}
+
+.visibility-controls .state-ghosted,
+.visibility-controls .state-mixed {
+  color: #a7773c;
+}
+
+.visibility-controls .state-hidden {
+  color: #a0aaab;
+}
+
+.visibility-controls button:hover,
+.visibility-controls button.is-active {
+  border-color: #9bb5b0;
+  color: #254f48;
+  background: #e3eeea;
+}
+
+.visibility-branches {
+  margin: 4px 0 7px 14px;
+  padding-left: 8px;
+  border-left: 1px solid #d5dfdc;
+}
+
+.visibility-rows.is-nested {
+  margin: 4px 0 7px 14px;
+}
+
+.visibility-rows.is-nested .visibility-row {
+  background: #f7f9f8;
+}
+
+.layer-browser footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 9px 13px;
+  border-top: 1px solid #dfe6e3;
+  color: #879496;
+  background: #f3f6f4;
+  font-size: 7px;
 }
 
 .dimension-readout {
@@ -479,6 +715,32 @@ select:focus-visible {
   margin: 0;
   font-weight: 700;
   text-transform: capitalize;
+}
+
+.selection-visibility-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid #e0e5e3;
+}
+
+.selection-visibility-actions button {
+  padding: 6px 3px;
+  border: 1px solid #d7dfdd;
+  border-radius: 6px;
+  color: #617477;
+  background: #fff;
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.selection-visibility-actions button:hover,
+.selection-visibility-actions button.is-active {
+  border-color: #88aaa4;
+  color: #2c5e55;
+  background: #e9f1ee;
 }
 
 .fabrication-details {
@@ -1161,7 +1423,7 @@ select:focus-visible {
   border: 0;
 }
 
-@media (max-width: 1050px) {
+@media (max-width: 1250px) {
   .app-header {
     grid-template-columns: auto 1fr;
   }

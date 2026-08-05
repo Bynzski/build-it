@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ZodError } from 'zod'
 import { DesignPanel } from './components/DesignPanel'
 import { GuidancePanel } from './components/GuidancePanel'
+import { constructionRoleLabels, LayerBrowser } from './components/LayerBrowser'
 import { MaterialsPanel } from './components/MaterialsPanel'
 import { generateBuilding } from './domain/generateBuilding'
 import { getMaterial } from './domain/materials'
@@ -14,15 +15,16 @@ import {
   saveRecovery,
 } from './persistence/projects'
 import { BuildingScene } from './scene/BuildingScene'
-import { useBuildStore, type ViewMode } from './store/useBuildStore'
+import { useBuildStore, type ViewPresetId } from './store/useBuildStore'
 
 type PanelTab = 'design' | 'materials' | 'guidance'
 
-const viewModes: Array<{ value: ViewMode; label: string }> = [
+const viewPresets: Array<{ value: ViewPresetId; label: string }> = [
+  { value: 'complete', label: 'Complete' },
   { value: 'framing', label: 'Framing' },
   { value: 'sheathing', label: 'Sheathing' },
-  { value: 'weather', label: 'WRB' },
-  { value: 'exterior', label: 'Exterior' },
+  { value: 'weather', label: 'Weather' },
+  { value: 'finished', label: 'Finished' },
   { value: 'xray', label: 'X-ray' },
 ]
 
@@ -34,10 +36,17 @@ export default function App() {
   const redo = useBuildStore((state) => state.redo)
   const reset = useBuildStore((state) => state.reset)
   const replaceProject = useBuildStore((state) => state.replaceProject)
-  const viewMode = useBuildStore((state) => state.viewMode)
-  const setViewMode = useBuildStore((state) => state.setViewMode)
-  const layerVisibility = useBuildStore((state) => state.layerVisibility)
-  const toggleLayer = useBuildStore((state) => state.toggleLayer)
+  const viewPreset = useBuildStore((state) => state.viewPreset)
+  const setViewPreset = useBuildStore((state) => state.setViewPreset)
+  const assemblyOverrides = useBuildStore((state) => state.assemblyOverrides)
+  const setAssemblyDisplay = useBuildStore((state) => state.setAssemblyDisplay)
+  const roleOverrides = useBuildStore((state) => state.roleOverrides)
+  const scopeOverrides = useBuildStore((state) => state.scopeOverrides)
+  const scopeRoleOverrides = useBuildStore((state) => state.scopeRoleOverrides)
+  const memberOverrides = useBuildStore((state) => state.memberOverrides)
+  const visibilityIsolation = useBuildStore((state) => state.visibilityIsolation)
+  const setMemberDisplay = useBuildStore((state) => state.setMemberDisplay)
+  const isolateVisibility = useBuildStore((state) => state.isolateVisibility)
   const selectedMemberId = useBuildStore((state) => state.selectedMemberId)
   const selectedOpeningId = useBuildStore((state) => state.selectedOpeningId)
   const selectMember = useBuildStore((state) => state.selectMember)
@@ -46,12 +55,20 @@ export default function App() {
   const [status, setStatus] = useState<string>('Reference design loaded')
   const [hydrated, setHydrated] = useState(false)
   const [fitViewRequest, setFitViewRequest] = useState(0)
+  const [layersOpen, setLayersOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const building = useMemo(() => generateBuilding(project), [project])
   const selectedMember = building.members.find((member) => member.id === selectedMemberId)
   const selectedOpening = project.openings.find((opening) => opening.id === selectedOpeningId)
   const blockedCount = building.guidance.filter((item) => item.level === 'blocked').length
+  const visibilityIsCustom =
+    Object.keys(assemblyOverrides).length > 0 ||
+    Object.keys(roleOverrides).length > 0 ||
+    Object.keys(scopeOverrides).length > 0 ||
+    Object.keys(scopeRoleOverrides).length > 0 ||
+    Object.keys(memberOverrides).length > 0 ||
+    visibilityIsolation !== null
 
   useEffect(() => {
     let active = true
@@ -93,6 +110,7 @@ export default function App() {
       if (event.key === 'Escape') {
         selectMember(null)
         selectOpening(null)
+        setLayersOpen(false)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -201,14 +219,14 @@ export default function App() {
           <div className="viewport-toolbar">
             <fieldset className="segmented-control">
               <legend className="visually-hidden">Model view</legend>
-              {viewModes.map((mode) => (
+              {viewPresets.map((preset) => (
                 <button
-                  key={mode.value}
+                  key={preset.value}
                   type="button"
-                  className={viewMode === mode.value ? 'is-active' : ''}
-                  onClick={() => setViewMode(mode.value)}
+                  className={viewPreset === preset.value ? 'is-active' : ''}
+                  onClick={() => setViewPreset(preset.value)}
                 >
-                  {mode.label}
+                  {preset.label}
                 </button>
               ))}
             </fieldset>
@@ -217,14 +235,32 @@ export default function App() {
                 <button
                   key={layer}
                   type="button"
-                  className={layerVisibility[layer] ? 'is-active' : ''}
-                  onClick={() => toggleLayer(layer)}
+                  className={
+                    assemblyOverrides[layer] === 'hidden'
+                      ? ''
+                      : assemblyOverrides[layer] === 'ghosted'
+                        ? 'is-ghosted'
+                        : 'is-active'
+                  }
+                  onClick={() =>
+                    setAssemblyDisplay(
+                      layer,
+                      assemblyOverrides[layer] === 'hidden' ? null : 'hidden',
+                    )
+                  }
                 >
                   <span />
                   {layer}
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              className={`layers-button${layersOpen ? ' is-active' : ''}`}
+              onClick={() => setLayersOpen((open) => !open)}
+            >
+              Layers{visibilityIsCustom ? ' · Custom' : ''}
+            </button>
             <button
               type="button"
               className="fit-view-button"
@@ -236,6 +272,10 @@ export default function App() {
               Reset reference
             </button>
           </div>
+
+          {layersOpen ? (
+            <LayerBrowser building={building} onClose={() => setLayersOpen(false)} />
+          ) : null}
 
           <div className="viewport-canvas" data-testid="building-viewport">
             <BuildingScene building={building} fitViewRequest={fitViewRequest} />
@@ -273,7 +313,11 @@ export default function App() {
                 </div>
                 <div>
                   <dt>Assembly</dt>
-                  <dd>{selectedMember.assembly}</dd>
+                  <dd>{selectedMember.scopeLabel}</dd>
+                </div>
+                <div>
+                  <dt>Layer</dt>
+                  <dd>{constructionRoleLabels[selectedMember.role]}</dd>
                 </div>
                 {selectedMember.cutLengthIn ? (
                   <div>
@@ -282,6 +326,42 @@ export default function App() {
                   </div>
                 ) : null}
               </dl>
+              <div className="selection-visibility-actions">
+                <button
+                  type="button"
+                  onClick={() => setMemberDisplay(selectedMember.id, 'visible')}
+                >
+                  Show
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMemberDisplay(selectedMember.id, 'ghosted')}
+                >
+                  Ghost
+                </button>
+                <button type="button" onClick={() => setMemberDisplay(selectedMember.id, 'hidden')}>
+                  Hide
+                </button>
+                <button
+                  type="button"
+                  className={
+                    visibilityIsolation?.type === 'member' &&
+                    visibilityIsolation.id === selectedMember.id
+                      ? 'is-active'
+                      : ''
+                  }
+                  onClick={() =>
+                    isolateVisibility(
+                      visibilityIsolation?.type === 'member' &&
+                        visibilityIsolation.id === selectedMember.id
+                        ? null
+                        : { type: 'member', id: selectedMember.id },
+                    )
+                  }
+                >
+                  Isolate
+                </button>
+              </div>
               {selectedMember.fabrication ? (
                 <div className="fabrication-details">
                   <h4>Cut details</h4>

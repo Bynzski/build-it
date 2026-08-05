@@ -12,10 +12,10 @@ test('loads, edits, and estimates the reference shed', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Sheathing' }).click()
   await expect(page.getByRole('button', { name: 'Sheathing' })).toHaveClass(/is-active/)
-  await page.getByRole('button', { name: 'WRB' }).click()
-  await expect(page.getByRole('button', { name: 'WRB' })).toHaveClass(/is-active/)
-  await page.getByRole('button', { name: 'Exterior' }).click()
-  await expect(page.getByRole('button', { name: 'Exterior' })).toHaveClass(/is-active/)
+  await page.getByRole('button', { name: 'Weather' }).click()
+  await expect(page.getByRole('button', { name: 'Weather' })).toHaveClass(/is-active/)
+  await page.getByRole('button', { name: 'Finished' }).click()
+  await expect(page.getByRole('button', { name: 'Finished' })).toHaveClass(/is-active/)
   await page.getByRole('button', { name: 'Fit view' }).click()
 
   const widthInput = page.getByTestId('design-panel').getByRole('spinbutton').first()
@@ -29,6 +29,34 @@ test('loads, edits, and estimates the reference shed', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Guidance' }).click()
   await expect(page.getByText('Width is near a sheet boundary')).toBeVisible()
+})
+
+test('supports granular model visibility and isolation', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Layers' }).click()
+
+  await expect(page.getByRole('complementary', { name: 'Model visibility' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Preset view' })).toBeVisible()
+
+  await page
+    .getByRole('button', {
+      name: 'Structural framing: Visible. Change display state.',
+    })
+    .click()
+  await expect(page.getByRole('button', { name: 'Layers · Custom' })).toBeVisible()
+  await expect(
+    page.getByRole('button', {
+      name: 'Structural framing: Ghosted. Change display state.',
+    }),
+  ).toBeVisible()
+
+  await page.getByRole('button', { name: 'Isolate Roof' }).click()
+  await expect(page.getByText('Isolation active')).toBeVisible()
+  await page.getByRole('button', { name: 'Show context' }).click()
+  await expect(page.getByText('Isolation active')).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Show all' }).click()
+  await expect(page.getByRole('button', { name: 'Complete' })).toHaveClass(/is-active/)
 })
 
 test('dimension handles require a drag and support cancellation', async ({ page }) => {

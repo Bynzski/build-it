@@ -2,6 +2,15 @@ import type { MaterialId } from './materials'
 
 export type AssemblyId = 'foundation' | 'floor' | 'walls' | 'roof'
 export type MemberLayer = 'framing' | 'sheathing' | 'weather' | 'finish'
+export type ConstructionRole =
+  | 'structure'
+  | 'sheathing'
+  | 'weatherproofing'
+  | 'trim-flashing'
+  | 'insulation'
+  | 'exterior-finish'
+  | 'interior-finish'
+  | 'opening'
 export type Vector3Tuple = [number, number, number]
 export type ProfilePoint = [number, number]
 
@@ -30,6 +39,10 @@ export interface ConstructionMember {
   label: string
   assembly: AssemblyId
   layer: MemberLayer
+  role: ConstructionRole
+  scopeId: string
+  scopeLabel: string
+  kind: string
   materialId: MaterialId
   size: Vector3Tuple
   position: Vector3Tuple

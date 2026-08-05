@@ -6,7 +6,8 @@ BuildIt is a local-first, material-aware 3D designer for basic sheds, cabins, an
 
 ## Current MVP
 
-- Interactive framing, sheathing, WRB, finished-exterior, and X-ray views with camera fit
+- Complete, framing, sheathing, weatherproofing, finished-exterior, and X-ray presets with camera fit
+- Granular model browser with visible, ghosted, hidden, isolated, Show all, and Reveal hidden states by construction role, building system, wall/roof scope, or selected part
 - Drag handles and exact width, length, and wall-height inputs
 - Skid foundation, platform floor, framed walls, gable roof, doors, and windows
 - Explicit 4×8 floor, wall, gable, and roof panel layouts with staggered joints and source-sheet opening cuts
@@ -52,7 +53,7 @@ Project JSON
     → React Three Fiber scene
 ```
 
-The construction domain under `src/domain/` does not depend on React or Three.js. Project files store authored inputs only; generated meshes and material totals are rebuilt on load. Fastener quantities are purchasing allowances derived from modeled connections and installation patterns, not an engineered fastening, uplift, or site-anchoring schedule.
+The construction domain under `src/domain/` does not depend on React or Three.js. Project files store authored inputs only; generated meshes and material totals are rebuilt on load. Generated parts carry semantic system, scope, role, and kind classifications that drive viewport visibility without changing the design or estimate. Fastener quantities are purchasing allowances derived from modeled connections and installation patterns, not an engineered fastening, uplift, or site-anchoring schedule.
 
 Width and length are outside-to-outside framing dimensions. Studs, joists, rafters, and panel seams share that outside-edge layout datum; structural panel end joints must land on framing, and interrupted edges receive modeled backing or blocking. Wall openings are stored as cuts in their original source sheets, so L-, C-, and U-shaped remnants remain one selectable panel and purchase quantities do not treat opening cutouts as automatic savings. A rake overhang uses a dropped gable top plate and on-edge outlookers that cantilever back to the first full common rafter; the fly rafter is an unnotched rake subfascia. Shared construction conventions—including panel sizes, joint spacing, sheathing corner ownership, exterior trim, and roof connection limits—live in the domain layer rather than being special-cased per design. Cladding and roofing materials carry typed installation profiles so layout, clearance, flashing, roof-panel coverage, rib geometry, and trim behavior can change without adding product-name checks to geometry code. The reference roof uses continuous 36-inch-coverage exposed-fastener panels over synthetic underlayment with eave, rake, closure, and solid-ridge components; its purchase count and order length come from the visible panel layout.
 

@@ -15,6 +15,36 @@ describe('construction generator', () => {
     expect(first.members.some((member) => member.id.startsWith('header-'))).toBe(true)
   })
 
+  it('classifies every generated part for scalable visibility controls', () => {
+    const building = generateBuilding(referenceDesign)
+    const frontStud = building.members.find(
+      (member) => member.kind === 'wall-stud' && member.scopeId === 'walls:front',
+    )
+    const leftRoofPanel = building.members.find(
+      (member) => member.kind === 'metal-roof-panel' && member.scopeId === 'roof:left',
+    )
+    const wallFlashing = building.members.find((member) => member.kind === 'z-flashing')
+
+    expect(building.members.every((member) => member.role && member.scopeId && member.kind)).toBe(
+      true,
+    )
+    expect(frontStud).toEqual(
+      expect.objectContaining({
+        assembly: 'walls',
+        role: 'structure',
+        scopeLabel: 'Front wall',
+      }),
+    )
+    expect(leftRoofPanel).toEqual(
+      expect.objectContaining({
+        assembly: 'roof',
+        role: 'exterior-finish',
+        scopeLabel: 'Left roof slope',
+      }),
+    )
+    expect(wallFlashing?.role).toBe('trim-flashing')
+  })
+
   it('derives purchase quantities from generated assemblies', () => {
     const building = generateBuilding(referenceDesign)
     const lumber = building.shoppingList.filter((item) => item.purchaseLengthIn)
