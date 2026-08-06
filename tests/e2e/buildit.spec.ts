@@ -59,6 +59,24 @@ test('supports granular model visibility and isolation', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Complete' })).toHaveClass(/is-active/)
 })
 
+test('opens project controls as dismissible overlays', async ({ page }) => {
+  await page.goto('/')
+
+  const designOverlay = page.getByRole('complementary', { name: 'design panel' })
+  await expect(designOverlay).toBeVisible()
+  await page.getByRole('button', { name: 'Design', exact: true }).click()
+  await expect(designOverlay).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Materials', exact: true }).click()
+  await expect(page.getByRole('complementary', { name: 'materials panel' })).toBeVisible()
+  await expect(page.getByTestId('materials-panel')).toBeVisible()
+  await page.getByRole('button', { name: 'Close materials' }).click()
+  await expect(page.getByTestId('materials-panel')).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Guidance', exact: true }).click()
+  await expect(page.getByTestId('guidance-panel')).toBeVisible()
+})
+
 test('dimension handles require a drag and support cancellation', async ({ page }) => {
   await page.goto('/')
   const widthInput = page.getByTestId('design-panel').getByRole('spinbutton').first()

@@ -56,6 +56,7 @@ export default function App() {
   const selectMember = useBuildStore((state) => state.selectMember)
   const selectOpening = useBuildStore((state) => state.selectOpening)
   const [activeTab, setActiveTab] = useState<PanelTab>('design')
+  const [propertyPanelOpen, setPropertyPanelOpen] = useState(true)
   const [status, setStatus] = useState<string>('Reference design loaded')
   const [hydrated, setHydrated] = useState(false)
   const [fitViewRequest, setFitViewRequest] = useState(0)
@@ -156,6 +157,11 @@ export default function App() {
     setCameraViewRequest((request) => ({ id: (request?.id ?? 0) + 1, view }))
   }, [])
 
+  const togglePropertyPanel = (panel: PanelTab) => {
+    setPropertyPanelOpen((open) => (activeTab === panel ? !open : true))
+    setActiveTab(panel)
+  }
+
   const handleReset = async () => {
     if (!window.confirm('Reset this design to the committed 8×10 reference shed?')) return
     reset()
@@ -178,13 +184,34 @@ export default function App() {
         </div>
 
         <div className="header-center">
-          <span className={`save-status ${blockedCount ? 'has-blocked' : ''}`}>
-            <span />
-            {blockedCount ? `${blockedCount} blocked item${blockedCount > 1 ? 's' : ''}` : status}
-          </span>
+          <nav className="header-panel-nav" aria-label="Project panels">
+            {(
+              [
+                ['design', 'Design'],
+                ['materials', 'Materials'],
+                ['guidance', 'Guidance'],
+              ] as Array<[PanelTab, string]>
+            ).map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                className={propertyPanelOpen && activeTab === value ? 'is-active' : ''}
+                onClick={() => togglePropertyPanel(value)}
+              >
+                {label}
+                {value === 'guidance' && blockedCount ? (
+                  <span className="panel-alert-count">{blockedCount}</span>
+                ) : null}
+              </button>
+            ))}
+          </nav>
         </div>
 
         <div className="header-actions">
+          <span className={`save-status ${blockedCount ? 'has-blocked' : ''}`}>
+            <span />
+            {blockedCount ? `${blockedCount} blocked` : status}
+          </span>
           <button
             type="button"
             className="icon-button"
@@ -436,37 +463,40 @@ export default function App() {
                 {selectedOpening.wall} wall · {formatFeetInches(selectedOpening.widthIn)} ×{' '}
                 {formatFeetInches(selectedOpening.heightIn)}
               </p>
-              <button type="button" className="text-button" onClick={() => setActiveTab('design')}>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  setActiveTab('design')
+                  setPropertyPanelOpen(true)
+                }}
+              >
                 Edit opening
               </button>
             </aside>
           ) : null}
         </section>
 
-        <aside className="property-sidebar">
-          <nav className="panel-tabs" aria-label="BuildIt panels">
-            {(
-              [
-                ['design', 'Design'],
-                ['materials', 'Materials'],
-                ['guidance', 'Guidance'],
-              ] as Array<[PanelTab, string]>
-            ).map(([value, label]) => (
+        {propertyPanelOpen ? (
+          <aside className="property-overlay" aria-label={`${activeTab} panel`}>
+            <header className="property-overlay-header">
+              <div>
+                <span className="eyebrow">Project</span>
+                <h2>{activeTab[0].toUpperCase() + activeTab.slice(1)}</h2>
+              </div>
               <button
                 type="button"
-                key={value}
-                className={activeTab === value ? 'is-active' : ''}
-                onClick={() => setActiveTab(value)}
+                onClick={() => setPropertyPanelOpen(false)}
+                aria-label={`Close ${activeTab}`}
               >
-                {label}
-                {value === 'guidance' && blockedCount ? <span>{blockedCount}</span> : null}
+                ×
               </button>
-            ))}
-          </nav>
-          {activeTab === 'design' ? <DesignPanel /> : null}
-          {activeTab === 'materials' ? <MaterialsPanel building={building} /> : null}
-          {activeTab === 'guidance' ? <GuidancePanel building={building} /> : null}
-        </aside>
+            </header>
+            {activeTab === 'design' ? <DesignPanel /> : null}
+            {activeTab === 'materials' ? <MaterialsPanel building={building} /> : null}
+            {activeTab === 'guidance' ? <GuidancePanel building={building} /> : null}
+          </aside>
+        ) : null}
       </main>
     </div>
   )

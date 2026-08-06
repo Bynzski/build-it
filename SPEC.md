@@ -106,7 +106,7 @@ Guidance has three levels:
 
 ### User Interface
 
-- Provide a 3D workspace and a compact configuration panel.
+- Provide a full-width 3D workspace with compact, dismissible configuration overlays.
 - Keep common actions visible and understandable without training.
 - Support desktop browsers first; tablet and mobile are secondary.
 
