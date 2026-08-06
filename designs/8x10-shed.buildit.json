@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "reference-8x10-shed",
   "name": "Reference 8×10 Shed",
   "useType": "shed",
@@ -56,5 +56,6 @@
       "sillHeightIn": 36
     }
   ],
-  "wasteFactorPct": 10
+  "wasteFactorPct": 10,
+  "savedViews": []
 }

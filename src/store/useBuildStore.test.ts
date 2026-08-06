@@ -68,4 +68,39 @@ describe('BuildIt editor history', () => {
     expect(useBuildStore.getState().memberOverrides).toEqual({})
     expect(useBuildStore.getState().visibilityIsolation).toBeNull()
   })
+
+  it('stores and reapplies portable named-view state without member ids', () => {
+    const store = useBuildStore.getState()
+    store.setViewPreset('sheathing')
+    store.setScopeDisplay('walls:front', 'hidden')
+    store.setMemberDisplay('generated-stud-1', 'hidden')
+    store.isolateVisibility({ type: 'member', id: 'generated-stud-1' })
+    store.setSectionView({ enabled: true, direction: 'front', offsetIn: 24 })
+
+    const view = {
+      id: 'front-section',
+      name: 'Front section',
+      camera: {
+        position: [0, 80, 300] as [number, number, number],
+        target: [0, 70, 0] as [number, number, number],
+      },
+      visibility: store.captureVisibility(),
+      section: useBuildStore.getState().sectionView,
+    }
+    store.upsertSavedView(view)
+
+    expect(useBuildStore.getState().project.savedViews[0].visibility.isolation).toBeNull()
+    expect(JSON.stringify(useBuildStore.getState().project.savedViews[0])).not.toContain(
+      'generated-stud-1',
+    )
+
+    useBuildStore.getState().setViewPreset('complete')
+    useBuildStore.getState().setSectionView({ enabled: false })
+    useBuildStore.getState().applySavedViewState(view)
+
+    const restored = useBuildStore.getState()
+    expect(restored.viewPreset).toBe('sheathing')
+    expect(restored.scopeOverrides['walls:front']).toBe('hidden')
+    expect(restored.sectionView).toEqual({ enabled: true, direction: 'front', offsetIn: 24 })
+  })
 })

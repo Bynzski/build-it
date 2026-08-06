@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { cloneProject, parseProject, projectSchema, referenceDesign } from './project'
+import { cloneProject, parseProject, referenceDesign } from './project'
 
 describe('BuildIt project schema', () => {
   it('loads the committed 8×10 reference project', () => {
-    expect(referenceDesign.schemaVersion).toBe(1)
+    expect(referenceDesign.schemaVersion).toBe(2)
     expect(referenceDesign.dimensions).toEqual({
       widthIn: 96,
       lengthIn: 120,
@@ -17,11 +17,15 @@ describe('BuildIt project schema', () => {
     expect(parseProject(JSON.parse(serialized))).toEqual(referenceDesign)
   })
 
-  it('adds the default WRB when opening an older schema-version-1 project', () => {
+  it('migrates a schema-version-1 project and adds its default fields', () => {
     const legacy = JSON.parse(JSON.stringify(referenceDesign))
+    legacy.schemaVersion = 1
+    delete legacy.savedViews
     delete legacy.walls.weatherBarrierMaterialId
 
     expect(parseProject(legacy).walls.weatherBarrierMaterialId).toBe('housewrap-wrb')
+    expect(parseProject(legacy).schemaVersion).toBe(2)
+    expect(parseProject(legacy).savedViews).toEqual([])
   })
 
   it('clones without sharing nested state', () => {
@@ -31,6 +35,6 @@ describe('BuildIt project schema', () => {
   })
 
   it('rejects an unsupported schema version', () => {
-    expect(() => projectSchema.parse({ ...referenceDesign, schemaVersion: 2 })).toThrow()
+    expect(() => parseProject({ ...referenceDesign, schemaVersion: 3 })).toThrow()
   })
 })

@@ -6,17 +6,32 @@ import type { ConstructionMember, GeneratedBuilding } from '../domain/constructi
 import { getMaterial } from '../domain/materials'
 import { formatFeetInches } from '../domain/units'
 import { type BuildItProject, cloneProject, type Opening } from '../model/project'
+import type { CameraViewState } from '../model/savedView'
 import { useBuildStore } from '../store/useBuildStore'
 import { cameraFitForBuilding } from './cameraFit'
+import { sectionPlaneDefinition } from './cameraViews'
 import { projectWorldAxisToScreen, type ScreenDragState, updateScreenDrag } from './dimensionDrag'
 import { resolveMemberPresentation } from './viewMode'
 
 interface BuildingSceneProps {
   building: GeneratedBuilding
   fitViewRequest: number
+  cameraViewRequest?: CameraViewRequest
+  onCameraViewChange?: (view: CameraViewState) => void
 }
 
-function MemberMesh({ member }: { member: ConstructionMember }) {
+export interface CameraViewRequest {
+  id: number
+  view: CameraViewState
+}
+
+function MemberMesh({
+  member,
+  clippingPlanes,
+}: {
+  member: ConstructionMember
+  clippingPlanes: THREE.Plane[]
+}) {
   const selectedMemberId = useBuildStore((state) => state.selectedMemberId)
   const selectMember = useBuildStore((state) => state.selectMember)
   const viewPreset = useBuildStore((state) => state.viewPreset)
@@ -127,6 +142,7 @@ function MemberMesh({ member }: { member: ConstructionMember }) {
     transparent: isTransparent,
     opacity,
     depthWrite: !isTransparent,
+    clippingPlanes,
   }
 
   if (member.shape === 'cut-panel') {
@@ -251,7 +267,15 @@ function openingPosition(
   }
 }
 
-function OpeningMarker({ opening, wallBase }: { opening: Opening; wallBase: number }) {
+function OpeningMarker({
+  opening,
+  wallBase,
+  clippingPlanes,
+}: {
+  opening: Opening
+  wallBase: number
+  clippingPlanes: THREE.Plane[]
+}) {
   const project = useBuildStore((state) => state.project)
   const selectedOpeningId = useBuildStore((state) => state.selectedOpeningId)
   const selectOpening = useBuildStore((state) => state.selectOpening)
@@ -273,6 +297,7 @@ function OpeningMarker({ opening, wallBase }: { opening: Opening; wallBase: numb
         wireframe
         transparent
         opacity={selected ? 1 : 0.42}
+        clippingPlanes={clippingPlanes}
       />
     </mesh>
   )
@@ -474,12 +499,21 @@ interface DefaultControls {
   update: () => void
 }
 
+function currentCameraView(camera: THREE.Camera, controls: DefaultControls): CameraViewState {
+  return {
+    position: [camera.position.x, camera.position.y, camera.position.z],
+    target: [controls.target.x, controls.target.y, controls.target.z],
+  }
+}
+
 function FitViewController({
   building,
   request,
+  onCameraViewChange,
 }: {
   building: GeneratedBuilding
   request: number
+  onCameraViewChange?: (view: CameraViewState) => void
 }) {
   const project = useBuildStore((state) => state.project)
   const camera = useThree((state) => state.camera)
@@ -511,12 +545,56 @@ function FitViewController({
     camera.lookAt(...fit.target)
     camera.updateProjectionMatrix()
     controls.update()
-  }, [camera, controls, request])
+    onCameraViewChange?.(currentCameraView(camera, controls))
+  }, [camera, controls, onCameraViewChange, request])
 
   return null
 }
 
-function SceneContents({ building, fitViewRequest }: BuildingSceneProps) {
+function CameraViewController({
+  cameraViewRequest: request,
+  onCameraViewChange,
+}: Pick<BuildingSceneProps, 'cameraViewRequest' | 'onCameraViewChange'>) {
+  const camera = useThree((state) => state.camera)
+  const controls = useThree((state) => state.controls) as DefaultControls | null
+
+  useEffect(() => {
+    if (!request || !controls) return
+    camera.position.set(...request.view.position)
+    controls.target.set(...request.view.target)
+    camera.lookAt(...request.view.target)
+    camera.updateProjectionMatrix()
+    controls.update()
+    onCameraViewChange?.(currentCameraView(camera, controls))
+  }, [camera, controls, onCameraViewChange, request])
+
+  useEffect(() => {
+    if (!controls) return
+    onCameraViewChange?.(currentCameraView(camera, controls))
+  }, [camera, controls, onCameraViewChange])
+
+  return null
+}
+
+function LocalClippingController() {
+  const gl = useThree((state) => state.gl)
+
+  useEffect(() => {
+    gl.localClippingEnabled = true
+    return () => {
+      gl.localClippingEnabled = false
+    }
+  }, [gl])
+
+  return null
+}
+
+function SceneContents({
+  building,
+  fitViewRequest,
+  cameraViewRequest,
+  onCameraViewChange,
+}: BuildingSceneProps) {
   const project = useBuildStore((state) => state.project)
   const selectMember = useBuildStore((state) => state.selectMember)
   const selectOpening = useBuildStore((state) => state.selectOpening)
@@ -525,6 +603,18 @@ function SceneContents({ building, fitViewRequest }: BuildingSceneProps) {
   const { widthIn, lengthIn, wallHeightIn } = project.dimensions
   const roofHandleClearance = project.roof.overhangIn + 9
   const [dimensionDragging, setDimensionDragging] = useState(false)
+  const sectionView = useBuildStore((state) => state.sectionView)
+  const clippingPlanes = useMemo(() => {
+    const definition = sectionPlaneDefinition(
+      sectionView,
+      widthIn,
+      lengthIn,
+      building.metrics.peakHeightIn,
+    )
+    return definition
+      ? [new THREE.Plane(new THREE.Vector3(...definition.normal), definition.constant)]
+      : []
+  }, [building.metrics.peakHeightIn, lengthIn, sectionView, widthIn])
 
   return (
     <>
@@ -549,10 +639,15 @@ function SceneContents({ building, fitViewRequest }: BuildingSceneProps) {
         }}
       >
         {building.members.map((member) => (
-          <MemberMesh key={member.id} member={member} />
+          <MemberMesh key={member.id} member={member} clippingPlanes={clippingPlanes} />
         ))}
         {project.openings.map((opening) => (
-          <OpeningMarker key={opening.id} opening={opening} wallBase={wallBase} />
+          <OpeningMarker
+            key={opening.id}
+            opening={opening}
+            wallBase={wallBase}
+            clippingPlanes={clippingPlanes}
+          />
         ))}
       </group>
       <DimensionHandle
@@ -611,12 +706,48 @@ function SceneContents({ building, fitViewRequest }: BuildingSceneProps) {
         enableDamping
         enabled={!dimensionDragging}
       />
-      <FitViewController building={building} request={fitViewRequest} />
+      <LocalClippingController />
+      <CameraViewReporter onCameraViewChange={onCameraViewChange} />
+      <FitViewController
+        building={building}
+        request={fitViewRequest}
+        onCameraViewChange={onCameraViewChange}
+      />
+      <CameraViewController
+        cameraViewRequest={cameraViewRequest}
+        onCameraViewChange={onCameraViewChange}
+      />
     </>
   )
 }
 
-export function BuildingScene({ building, fitViewRequest }: BuildingSceneProps) {
+function CameraViewReporter({
+  onCameraViewChange,
+}: Pick<BuildingSceneProps, 'onCameraViewChange'>) {
+  const camera = useThree((state) => state.camera)
+  const controls = useThree((state) => state.controls) as
+    | (DefaultControls & {
+        addEventListener: (type: string, listener: () => void) => void
+        removeEventListener: (type: string, listener: () => void) => void
+      })
+    | null
+
+  useEffect(() => {
+    if (!controls || !onCameraViewChange) return
+    const report = () => onCameraViewChange(currentCameraView(camera, controls))
+    controls.addEventListener('end', report)
+    return () => controls.removeEventListener('end', report)
+  }, [camera, controls, onCameraViewChange])
+
+  return null
+}
+
+export function BuildingScene({
+  building,
+  fitViewRequest,
+  cameraViewRequest,
+  onCameraViewChange,
+}: BuildingSceneProps) {
   const cameraPosition = useMemo<[number, number, number]>(() => [190, 155, 215], [])
 
   return (
@@ -626,7 +757,12 @@ export function BuildingScene({ building, fitViewRequest }: BuildingSceneProps) 
       camera={{ position: cameraPosition, fov: 42, near: 1, far: 2400 }}
       gl={{ antialias: true, alpha: false }}
     >
-      <SceneContents building={building} fitViewRequest={fitViewRequest} />
+      <SceneContents
+        building={building}
+        fitViewRequest={fitViewRequest}
+        cameraViewRequest={cameraViewRequest}
+        onCameraViewChange={onCameraViewChange}
+      />
     </Canvas>
   )
 }

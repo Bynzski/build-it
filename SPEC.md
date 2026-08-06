@@ -50,6 +50,9 @@ Member sizes and spacing are modeling inputs, not span approval. The reference d
 - Keep viewport visibility independent from design inclusion and material estimation; hiding a part never removes it from the building or purchase estimate.
 - Provide Show all, Reset preset, and temporary Reveal hidden actions so custom inspection states are recoverable.
 - Let the user fit the camera to the current building without changing the design.
+- Provide standard front, back, left, right, top, and perspective viewpoints.
+- Provide one adjustable directional section cut for inspecting construction assemblies.
+- Let users save named views containing camera, semantic visibility, and section state.
 - Prevent invalid geometry, such as openings outside a wall.
 - Use inches internally and display dimensions clearly as feet and inches.
 - Treat authored width and length as outside-to-outside structural framing dimensions, not interior or finished-envelope dimensions.
@@ -115,7 +118,7 @@ Guidance has three levels:
 - Support open, save, save-as, import, and export workflows where the browser permits.
 - Use browser storage only for autosave and recovery, not as the permanent source of truth.
 - Do not store generated meshes or calculated material totals in project files.
-- Keep transient visibility overrides out of project files. Future named views may store semantic filters, camera state, and section state without storing generated member IDs.
+- Keep transient visibility overrides out of project files. Named views may store semantic filters, camera state, and section state, but must not store generated member IDs.
 
 ### Materials
 
@@ -173,7 +176,7 @@ Project inputs
 - Multi-user collaboration or cloud accounts.
 - Automated pricing, ordering, or contractor workflows.
 - Free-form or curved building footprints.
-- Multiple simultaneous viewports, named view sets, and movable section planes in the initial visibility-browser slice.
+- Multiple simultaneous viewports and drawing-sheet composition.
 
 ## 6. Success Criteria
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import referenceDesignJson from '../../designs/8x10-shed.buildit.json'
+import type { SavedView } from './savedView'
 
 const spacingSchema = z.union([z.literal(16), z.literal(24)])
 const wallSizeSchema = z.enum(['2x4', '2x6'])
@@ -15,8 +16,57 @@ export const openingSchema = z.object({
   sillHeightIn: z.number().min(0).max(120),
 })
 
-export const projectSchema = z.object({
-  schemaVersion: z.literal(1),
+const displayStateSchema = z.enum(['visible', 'ghosted', 'hidden'])
+const assemblyOverridesSchema = z
+  .object({
+    foundation: displayStateSchema.optional(),
+    floor: displayStateSchema.optional(),
+    walls: displayStateSchema.optional(),
+    roof: displayStateSchema.optional(),
+  })
+  .default({})
+const roleOverridesSchema = z
+  .object({
+    structure: displayStateSchema.optional(),
+    sheathing: displayStateSchema.optional(),
+    weatherproofing: displayStateSchema.optional(),
+    'trim-flashing': displayStateSchema.optional(),
+    insulation: displayStateSchema.optional(),
+    'exterior-finish': displayStateSchema.optional(),
+    'interior-finish': displayStateSchema.optional(),
+    opening: displayStateSchema.optional(),
+  })
+  .default({})
+
+export const savedViewSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(80),
+  camera: z.object({
+    position: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
+    target: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
+  }),
+  visibility: z.object({
+    preset: z.enum(['complete', 'framing', 'sheathing', 'weather', 'finished', 'xray']),
+    assemblyOverrides: assemblyOverridesSchema,
+    roleOverrides: roleOverridesSchema,
+    scopeOverrides: z.record(z.string(), displayStateSchema).default({}),
+    scopeRoleOverrides: z.record(z.string(), displayStateSchema).default({}),
+    isolation: z
+      .object({
+        type: z.enum(['assembly', 'scope', 'scope-role', 'role']),
+        id: z.string().min(1),
+      })
+      .nullable()
+      .default(null),
+  }),
+  section: z.object({
+    enabled: z.boolean(),
+    direction: z.enum(['front', 'back', 'left', 'right', 'top']),
+    offsetIn: z.number().min(0).max(600),
+  }),
+}) satisfies z.ZodType<SavedView>
+
+const projectFields = {
   id: z.string().min(1),
   name: z.string().min(1).max(120),
   useType: z.enum(['shed', 'cabin']),
@@ -55,6 +105,17 @@ export const projectSchema = z.object({
   }),
   openings: z.array(openingSchema).max(12),
   wasteFactorPct: z.number().min(0).max(30),
+}
+
+const projectV1Schema = z.object({
+  schemaVersion: z.literal(1),
+  ...projectFields,
+})
+
+export const projectSchema = z.object({
+  schemaVersion: z.literal(2),
+  ...projectFields,
+  savedViews: z.array(savedViewSchema).max(24).default([]),
 })
 
 export type BuildItProject = z.infer<typeof projectSchema>
@@ -64,6 +125,11 @@ export type WallId = Opening['wall']
 export const referenceDesign: BuildItProject = projectSchema.parse(referenceDesignJson)
 
 export function parseProject(value: unknown): BuildItProject {
+  const version = z.object({ schemaVersion: z.number() }).parse(value).schemaVersion
+  if (version === 1) {
+    const legacy = projectV1Schema.parse(value)
+    return projectSchema.parse({ ...legacy, schemaVersion: 2, savedViews: [] })
+  }
   return projectSchema.parse(value)
 }
 

@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ZodError } from 'zod'
 import { DesignPanel } from './components/DesignPanel'
 import { GuidancePanel } from './components/GuidancePanel'
 import { constructionRoleLabels, LayerBrowser } from './components/LayerBrowser'
 import { MaterialsPanel } from './components/MaterialsPanel'
+import { ViewBrowser } from './components/ViewBrowser'
 import { generateBuilding } from './domain/generateBuilding'
 import { getMaterial } from './domain/materials'
 import { formatFeetInches } from './domain/units'
+import type { CameraViewState } from './model/savedView'
 import {
   clearRecovery,
   loadRecovery,
@@ -14,10 +16,12 @@ import {
   saveProjectFile,
   saveRecovery,
 } from './persistence/projects'
+import type { CameraViewRequest } from './scene/BuildingScene'
 import { BuildingScene } from './scene/BuildingScene'
 import { useBuildStore, type ViewPresetId } from './store/useBuildStore'
 
 type PanelTab = 'design' | 'materials' | 'guidance'
+type WorkspacePanel = 'layers' | 'views' | null
 
 const viewPresets: Array<{ value: ViewPresetId; label: string }> = [
   { value: 'complete', label: 'Complete' },
@@ -55,7 +59,12 @@ export default function App() {
   const [status, setStatus] = useState<string>('Reference design loaded')
   const [hydrated, setHydrated] = useState(false)
   const [fitViewRequest, setFitViewRequest] = useState(0)
-  const [layersOpen, setLayersOpen] = useState(false)
+  const [workspacePanel, setWorkspacePanel] = useState<WorkspacePanel>(null)
+  const [cameraView, setCameraView] = useState<CameraViewState>({
+    position: [190, 155, 215],
+    target: [0, 70, 0],
+  })
+  const [cameraViewRequest, setCameraViewRequest] = useState<CameraViewRequest>()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const building = useMemo(() => generateBuilding(project), [project])
@@ -110,7 +119,7 @@ export default function App() {
       if (event.key === 'Escape') {
         selectMember(null)
         selectOpening(null)
-        setLayersOpen(false)
+        setWorkspacePanel(null)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -137,11 +146,15 @@ export default function App() {
     } catch (error) {
       setStatus(
         error instanceof ZodError
-          ? 'Project file does not match the BuildIt v1 schema'
+          ? 'Project file does not match a supported BuildIt schema'
           : 'Could not read project file',
       )
     }
   }
+
+  const applyCameraView = useCallback((view: CameraViewState) => {
+    setCameraViewRequest((request) => ({ id: (request?.id ?? 0) + 1, view }))
+  }, [])
 
   const handleReset = async () => {
     if (!window.confirm('Reset this design to the committed 8×10 reference shed?')) return
@@ -256,10 +269,17 @@ export default function App() {
             </div>
             <button
               type="button"
-              className={`layers-button${layersOpen ? ' is-active' : ''}`}
-              onClick={() => setLayersOpen((open) => !open)}
+              className={`layers-button${workspacePanel === 'layers' ? ' is-active' : ''}`}
+              onClick={() => setWorkspacePanel((panel) => (panel === 'layers' ? null : 'layers'))}
             >
               Layers{visibilityIsCustom ? ' · Custom' : ''}
+            </button>
+            <button
+              type="button"
+              className={`views-button${workspacePanel === 'views' ? ' is-active' : ''}`}
+              onClick={() => setWorkspacePanel((panel) => (panel === 'views' ? null : 'views'))}
+            >
+              Views
             </button>
             <button
               type="button"
@@ -273,12 +293,25 @@ export default function App() {
             </button>
           </div>
 
-          {layersOpen ? (
-            <LayerBrowser building={building} onClose={() => setLayersOpen(false)} />
+          {workspacePanel === 'layers' ? (
+            <LayerBrowser building={building} onClose={() => setWorkspacePanel(null)} />
+          ) : null}
+          {workspacePanel === 'views' ? (
+            <ViewBrowser
+              building={building}
+              cameraView={cameraView}
+              onApplyCamera={applyCameraView}
+              onClose={() => setWorkspacePanel(null)}
+            />
           ) : null}
 
           <div className="viewport-canvas" data-testid="building-viewport">
-            <BuildingScene building={building} fitViewRequest={fitViewRequest} />
+            <BuildingScene
+              building={building}
+              fitViewRequest={fitViewRequest}
+              cameraViewRequest={cameraViewRequest}
+              onCameraViewChange={setCameraView}
+            />
           </div>
 
           <div className="dimension-readout">

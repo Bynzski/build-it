@@ -7,6 +7,13 @@ import {
   parseProject,
   referenceDesign,
 } from '../model/project'
+import {
+  defaultSectionView,
+  type SavedView,
+  type SavedVisibilityState,
+  type SectionViewState,
+  type SemanticVisibilityIsolation,
+} from '../model/savedView'
 import type { DisplayState, ViewPresetId, VisibilityIsolation } from '../scene/viewMode'
 
 export type { DisplayState, ViewPresetId, VisibilityIsolation } from '../scene/viewMode'
@@ -25,6 +32,7 @@ interface BuildItStore {
   memberOverrides: Record<string, DisplayState>
   visibilityIsolation: VisibilityIsolation | null
   revealHidden: boolean
+  sectionView: SectionViewState
   commitProject: (project: BuildItProject) => void
   replaceProject: (project: BuildItProject) => void
   previewDimension: (field: keyof BuildItProject['dimensions'], value: number) => void
@@ -51,6 +59,11 @@ interface BuildItStore {
   resetVisibility: () => void
   showAll: () => void
   toggleRevealHidden: () => void
+  setSectionView: (values: Partial<SectionViewState>) => void
+  captureVisibility: () => SavedVisibilityState
+  applySavedViewState: (view: SavedView) => void
+  upsertSavedView: (view: SavedView) => void
+  removeSavedView: (id: string) => void
   undo: () => void
   redo: () => void
   reset: () => void
@@ -108,6 +121,7 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
     selectedMemberId: null,
     selectedOpeningId: null,
     ...clearedVisibility('xray'),
+    sectionView: { ...defaultSectionView },
     commitProject: commit,
     replaceProject: (project) =>
       set({
@@ -117,6 +131,7 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
         selectedMemberId: null,
         selectedOpeningId: null,
         ...clearedVisibility('xray'),
+        sectionView: { ...defaultSectionView },
       }),
     previewDimension: (field, value) =>
       set((state) => ({
@@ -259,6 +274,55 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
       set((state) => ({ ...clearedVisibility(state.viewPreset), selectedMemberId: null })),
     showAll: () => set({ ...clearedVisibility('complete'), selectedMemberId: null }),
     toggleRevealHidden: () => set((state) => ({ revealHidden: !state.revealHidden })),
+    setSectionView: (values) =>
+      set((state) => ({
+        sectionView: {
+          ...state.sectionView,
+          ...values,
+          offsetIn:
+            values.offsetIn === undefined
+              ? state.sectionView.offsetIn
+              : Math.max(0, values.offsetIn),
+        },
+      })),
+    captureVisibility: () => {
+      const state = get()
+      const isolation = state.visibilityIsolation
+      const semanticIsolation: SemanticVisibilityIsolation | null =
+        isolation && isolation.type !== 'member' ? isolation : null
+      return {
+        preset: state.viewPreset,
+        assemblyOverrides: { ...state.assemblyOverrides },
+        roleOverrides: { ...state.roleOverrides },
+        scopeOverrides: { ...state.scopeOverrides },
+        scopeRoleOverrides: { ...state.scopeRoleOverrides },
+        isolation: semanticIsolation,
+      }
+    },
+    applySavedViewState: (view) =>
+      set({
+        viewPreset: view.visibility.preset,
+        assemblyOverrides: { ...view.visibility.assemblyOverrides },
+        roleOverrides: { ...view.visibility.roleOverrides },
+        scopeOverrides: { ...view.visibility.scopeOverrides },
+        scopeRoleOverrides: { ...view.visibility.scopeRoleOverrides },
+        memberOverrides: {},
+        visibilityIsolation: view.visibility.isolation,
+        revealHidden: false,
+        sectionView: { ...view.section },
+        selectedMemberId: null,
+        selectedOpeningId: null,
+      }),
+    upsertSavedView: (view) =>
+      update((draft) => {
+        const index = draft.savedViews.findIndex((candidate) => candidate.id === view.id)
+        if (index === -1) draft.savedViews.push(view)
+        else draft.savedViews[index] = view
+      }),
+    removeSavedView: (id) =>
+      update((draft) => {
+        draft.savedViews = draft.savedViews.filter((view) => view.id !== id)
+      }),
     undo: () => {
       const { past, project, future, visibilityIsolation } = get()
       const previous = past.at(-1)
@@ -293,6 +357,7 @@ export const useBuildStore = create<BuildItStore>((set, get) => {
         selectedMemberId: null,
         selectedOpeningId: null,
         ...clearedVisibility('xray'),
+        sectionView: { ...defaultSectionView },
       }),
   }
 })

@@ -1,13 +1,9 @@
 import type { AssemblyId, ConstructionMember, ConstructionRole } from '../domain/construction'
+import type { DisplayState, SemanticVisibilityIsolation, ViewPresetId } from '../model/savedView'
 
-export type ViewPresetId = 'complete' | 'framing' | 'sheathing' | 'weather' | 'finished' | 'xray'
+export type { DisplayState, ViewPresetId } from '../model/savedView'
 
-export type DisplayState = 'visible' | 'ghosted' | 'hidden'
-
-export interface VisibilityIsolation {
-  type: 'assembly' | 'scope' | 'scope-role' | 'role' | 'member'
-  id: string
-}
+export type VisibilityIsolation = SemanticVisibilityIsolation | { type: 'member'; id: string }
 
 export interface ViewVisibilitySettings {
   viewPreset: ViewPresetId

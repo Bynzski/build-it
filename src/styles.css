@@ -336,7 +336,8 @@ select:focus-visible {
 
 .fit-view-button,
 .reset-button,
-.layers-button {
+.layers-button,
+.views-button {
   padding: 9px 12px;
   border-radius: 9px;
   color: #6e7c7e;
@@ -347,7 +348,8 @@ select:focus-visible {
   backdrop-filter: blur(10px);
 }
 
-.layers-button.is-active {
+.layers-button.is-active,
+.views-button.is-active {
   color: #f7fbf9;
   background: #294f49;
 }
@@ -371,6 +373,232 @@ select:focus-visible {
   box-shadow: 0 16px 42px rgba(31, 52, 54, 0.2);
   backdrop-filter: blur(14px);
   overflow: hidden;
+}
+
+.view-browser {
+  position: absolute;
+  z-index: 14;
+  top: 66px;
+  left: 18px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(360px, calc(100% - 36px));
+  max-height: calc(100% - 100px);
+  border: 1px solid rgba(62, 88, 89, 0.2);
+  border-radius: 12px;
+  background: rgba(249, 251, 249, 0.97);
+  box-shadow: 0 16px 42px rgba(31, 52, 54, 0.2);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+.view-browser-scroll {
+  min-height: 0;
+  padding: 0 13px 16px;
+  overflow-y: auto;
+}
+
+.view-browser-section {
+  padding: 13px 0;
+}
+
+.view-browser-section + .view-browser-section {
+  border-top: 1px solid #e1e7e5;
+}
+
+.view-browser-section h3,
+.view-browser-section p {
+  margin: 0;
+}
+
+.view-browser-section h3 {
+  color: #455a5d;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.view-browser-section p {
+  margin-top: 5px;
+  color: #829092;
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.standard-view-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.standard-view-grid button,
+.section-direction-grid button,
+.save-view-row button,
+.saved-view-actions button {
+  border: 1px solid #d4ddda;
+  border-radius: 6px;
+  color: #52696c;
+  background: #fff;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.standard-view-grid button {
+  min-height: 31px;
+}
+
+.standard-view-grid button:hover,
+.section-direction-grid button:hover,
+.section-direction-grid button.is-active,
+.saved-view-actions button:hover {
+  border-color: #8fafa8;
+  color: #285b52;
+  background: #e8f1ee;
+}
+
+.section-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #4e6568;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.switch-label input {
+  accent-color: #2e6a5f;
+}
+
+.section-direction-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.section-direction-grid button {
+  min-height: 28px;
+  padding: 0 3px;
+}
+
+.section-depth-control {
+  margin-top: 11px;
+}
+
+.section-depth-control label {
+  display: flex;
+  justify-content: space-between;
+  color: #64777a;
+  font-size: 8px;
+}
+
+.section-depth-control strong {
+  color: #345d56;
+}
+
+.section-depth-control input {
+  width: 100%;
+  margin-top: 5px;
+  accent-color: #2e6a5f;
+}
+
+.save-view-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.save-view-row input {
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d3dcda;
+  border-radius: 6px;
+  color: #334b4e;
+  background: #fff;
+  font-size: 9px;
+}
+
+.save-view-row button {
+  padding: 0 12px;
+  color: #fff;
+  background: #315f57;
+}
+
+.save-view-row button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.saved-view-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.saved-view-list article {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  border-radius: 7px;
+  background: #f0f5f3;
+}
+
+.saved-view-list article > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.saved-view-list strong {
+  color: #3f5558;
+  font-size: 9px;
+}
+
+.saved-view-list small {
+  color: #899698;
+  font-size: 7px;
+  text-transform: capitalize;
+}
+
+.saved-view-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.saved-view-actions button {
+  min-height: 26px;
+}
+
+.saved-view-actions button.is-danger {
+  color: #934e4e;
+}
+
+.empty-view-state {
+  padding: 14px;
+  border: 1px dashed #d3ddda;
+  border-radius: 7px;
+  color: #8a9798;
+  font-size: 8px;
+  text-align: center;
+}
+
+.view-browser footer {
+  padding: 9px 13px;
+  border-top: 1px solid #dfe6e3;
+  color: #879496;
+  background: #f3f6f4;
+  font-size: 7px;
 }
 
 .layer-browser-header {

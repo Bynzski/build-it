@@ -92,3 +92,24 @@ test('dimension handles require a drag and support cancellation', async ({ page 
   await page.mouse.up()
   await expect(widthInput).not.toHaveValue('96')
 })
+
+test('creates and restores a named section view', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Views' }).click()
+
+  const views = page.getByRole('complementary', { name: 'Views and section cuts' })
+  await expect(views).toBeVisible()
+  await views.getByRole('button', { name: 'Front', exact: true }).first().click()
+  await views.getByRole('checkbox').check()
+  await views.getByLabel('Cut depth').fill('24')
+  await views.getByLabel('New view name').fill('Front assembly cut')
+  await views.getByRole('button', { name: 'Save', exact: true }).click()
+
+  await expect(page.getByText('Front assembly cut')).toBeVisible()
+  await expect(page.getByText('xray · front cut')).toBeVisible()
+
+  await views.getByRole('checkbox').uncheck()
+  await views.getByRole('button', { name: 'Open', exact: true }).click()
+  await expect(views.getByRole('checkbox')).toBeChecked()
+  await expect(views.getByLabel('Cut depth')).toHaveValue('24')
+})
